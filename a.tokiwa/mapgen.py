@@ -1,6 +1,7 @@
 import healpy as hp
 import pandas as pd
 import numpy as np
+import glob
 
 #!wget -P /gpfs02/work/akira.tokiwa/gpgpu/data -c https://irsa.ipac.caltech.edu/data/Planck/release_3/ancillary-data/cosmoparams/COM_PowerSpect_CMB-base-plikHM-TTTEEE-lowl-lowE-lensing-minimum-theory_R3.01.txt
 
@@ -21,11 +22,11 @@ def gen_alm(low_nside, cl, lmax, seed, alm_dir):
     clipping_indices = np.concatenate(clipping_indices)
     alm = hp.synalm((cl.TT, cl.EE, cl.BB, cl.TE), lmax=lmax, new=True)
     alm_clipped = [each[clipping_indices] for each in alm]
-    hp.write_alm(alm_dir + f"Planck_bestfit_alm_seed_{seed}_lmax_{lclip}_K_CMB.fits", alm_clipped, overwrite=True)
+    hp.write_alm(alm_dir + "Planck_bestfit_alm_seed_{}_lmax_{}_K_CMB.fits".format(seed, lclip), alm_clipped, overwrite=True)
     return alm_clipped, lclip
     
 def main():
-    base_dir = "/gpfs02/work/akira.tokiwa/gpgpu/data/"
+    base_dir = "/Users/akiratokiwa/workspace/SR-SPHERE/data/"
     n_gen = 1000
     cl_dir = base_dir + "COM_PowerSpect_CMB-base-plikHM-TTTEEE-lowl-lowE-lensing-minimum-theory_R3.01.txt"
     alm_dir = base_dir + "HR/alm/"
