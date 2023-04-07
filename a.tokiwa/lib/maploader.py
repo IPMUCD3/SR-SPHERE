@@ -40,10 +40,12 @@ class MapDataset(data.Dataset):
         data = np.vstack([dmap[self.ringorder] for dmap in dmaps])
         if self.issplit:
             label = np.repeat(np.arange(self.split_npix)[None, :], self.n_maps, axis=0).ravel().reshape(-1,1)
+            label = transforms.ToTensor()(label).view(self.n_maps*self.split_npix, 1).float()
             dataset =  np.vstack([self.split.split(el) for el in data])
-            return label, transforms.ToTensor()(dataset).view(self.n_maps*self.split_npix, self.npix//self.split_npix, 1)
+            dataset = transforms.ToTensor()(dataset).view(self.n_maps*self.split_npix, self.npix//self.split_npix, 1).float()
+            return label, dataset
         else:
-            dataset = transforms.ToTensor()(data).view(self.n_maps, self.npix, 1)
+            dataset = transforms.ToTensor()(data).view(self.n_maps, self.npix, 1).float()
             return dataset
     
     def __len__(self):
@@ -54,7 +56,12 @@ def get_loaders(hrmaps_dir, lrmaps_dir, n_maps, nside_hr, nside_lr, rate_train, 
     dataset_lr = MapDataset(lrmaps_dir, n_maps, nside_lr, issplit=issplit, split_npix=split_npix)
     len_train = int(dataset_hr.len * rate_train)
     len_val = int(dataset_hr.len - len_train)
-    dataset = data.TensorDataset(dataset_hr, dataset_lr)
+    if issplit:
+        dlr = dataset_lr.__getitem__()
+        dhr = dataset_hr.__getitem__()
+        dataset = data.TensorDataset(dlr[0], dlr[1], dhr[1])
+    else:
+        dataset = data.TensorDataset(dataset_hr.__getitem__(), dataset_lr.__getitem__())
     train, val = data.random_split(dataset, [len_train, len_val])
     train_loader = data.DataLoader(train, batch_size=batch_size, shuffle=True)
     val_loader = data.DataLoader(val, batch_size=batch_size, shuffle=False)

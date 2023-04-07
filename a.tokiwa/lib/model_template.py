@@ -7,19 +7,6 @@ from healpix_pool_unpool import Healpix
 from laplacian_funcs import get_healpix_laplacians
 from maploader import MapDataset
 
-class paramset():
-    def __init__(self, MapDataset, depth, kernel_size, max_lr, epochs, batch_size):
-        self.len_train = MapDataset.len_train
-        self.len_val = MapDataset.len_val
-        self.depth = depth
-        self.kernel_size = kernel_size
-        self.max_lr = max_lr
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.steps_per_epoch = MapDataset.n_maps * MapDataset.split_order**2 // batch_size
-        self.npix_hr = MapDataset.npix_hr
-        self.npix_lr = MapDataset.npix_lr
-
 class template(pl.LightningModule):
     def __init__(self, params):
         super().__init__()

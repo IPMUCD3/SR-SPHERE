@@ -170,6 +170,6 @@ class PatchSphericalChebConv(nn.Module):
         super().__init__()
         self.chebconv = ChebConv(in_channels, out_channels, kernel_size)
 
-    def forward(self, lap, x):
+    def forward(self, x, lap):
         x = self.chebconv(lap, x)
         return x
