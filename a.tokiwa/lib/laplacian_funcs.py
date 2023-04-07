@@ -6,7 +6,9 @@ import torch
 #from pygsp.graphs.nngraphs.spherehealpix import SphereHealpix
 from spherehealpix import SphereHealpix
 from scipy import sparse
-from scipy.sparse import coo_matrix
+from scipy.sparse import csr_matrix,coo_matrix
+from maploader import hp_split
+import healpy as hp
 
 def scipy_csr_to_sparse_tensor(csr_mat):
     """Convert scipy csr to sparse pytorch tensor.
@@ -76,3 +78,17 @@ def get_healpix_laplacians(nodes, depth, laplacian_type):
         laplacian = prepare_laplacian(G.L)
         laps.append(laplacian)
     return laps[::-1]
+
+def patch_laplacian(laps, nodes, depth, split_npix):
+    # (list, int, int, int) -> list:shape(depth, split_npix)
+    patch_laps = []
+    for i in range(depth):
+        tmp_nside = int(hp.npix2nside(nodes)/2**i)
+        mat_order = hp_split(hp.nside2npix(tmp_nside), split_npix).mat_order
+        tmp_lap = laps[::-1][i].to_dense()
+        laps_current_depth = []
+        for j in range(len(mat_order)):
+            tmp_lap_current_depth = tmp_lap[:, mat_order[j]][mat_order[j], :]
+            laps_current_depth.append(scipy_csr_to_sparse_tensor(csr_matrix(tmp_lap_current_depth)))
+        patch_laps.append(laps_current_depth)
+    return patch_laps[::-1]

@@ -26,8 +26,8 @@ def gen_alm(low_nside, cl, lmax, seed, alm_dir):
     return alm_clipped, lclip
     
 def main():
-    base_dir = "/Users/akiratokiwa/workspace/SR-SPHERE/data/"
-    n_gen = 1000
+    base_dir = "/Users/akiratokiwa/workspace/SR-SPHERE/a.tokiwa/data/"
+    n_gen = 100
     cl_dir = base_dir + "COM_PowerSpect_CMB-base-plikHM-TTTEEE-lowl-lowE-lensing-minimum-theory_R3.01.txt"
     alm_dir = base_dir + "HR/alm/"
     map_dir = base_dir + "HR/map/"
@@ -40,7 +40,7 @@ def main():
         np.random.seed(seed)
         alm, lclip = gen_alm(low_nside, cl, lmax, seed, alm_dir)
         generated = hp.alm2map(alm, nside=low_nside)
-        hp.write_map(map_dir+f"map_nside_{low_nside}_from_alm_seed_{seed}_lmax_{lclip}_K_CMB.fits", generated, overwrite=True)
+        hp.write_map(map_dir+"map_nside_{}_from_alm_seed_{}_lmax_{}_K_CMB.fits".format(low_nside,seed , lclip), generated, overwrite=True)
     
     lrmap_dir = base_dir + "LR/map/"
     hrmaps = sorted(glob.glob(map_dir+"*.fits"))
@@ -51,7 +51,7 @@ def main():
         lrmap = hp.ud_grade(hrmap, nside_lr)
         nside_hr = f.split("_")[2]
         seed = f.split("_")[6]
-        hp.write_map(lrmap_dir+f"downsampled_map_nside_{nside_lr}_from_nside_{nside_hr}_seed_{seed}.fits", lrmap, overwrite=True)
+        hp.write_map(lrmap_dir+"downsampled_map_nside_{}_from_nside_{}_seed_{}.fits".format(nside_lr, nside_hr, seed), lrmap, overwrite=True)
     return 0
 
 if __name__ == '__main__':

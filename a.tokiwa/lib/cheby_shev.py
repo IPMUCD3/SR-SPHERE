@@ -153,3 +153,23 @@ class SphericalChebConv(nn.Module):
         """
         x = self.chebconv(self.laplacian, x)
         return x
+    
+class PatchSphericalChebConv(nn.Module):
+    """Building Block with a Chebyshev Convolution.
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size):
+        """Initialization.
+
+        Args:
+            in_channels (int): initial number of channels
+            out_channels (int): output number of channels
+            lap (:obj:`torch.sparse.FloatTensor`): laplacian
+            kernel_size (int): polynomial degree. Defaults to 3.
+        """
+        super().__init__()
+        self.chebconv = ChebConv(in_channels, out_channels, kernel_size)
+
+    def forward(self, lap, x):
+        x = self.chebconv(lap, x)
+        return x

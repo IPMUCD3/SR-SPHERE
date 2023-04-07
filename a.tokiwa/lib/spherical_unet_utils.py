@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import torch
 from torch import nn
 
-from cheby_shev import SphericalChebConv
+from cheby_shev import SphericalChebConv, PatchSphericalChebConv
 
 class SphericalCheb(nn.Module):
     def __init__(self, in_channels, out_channels, lap, kernel_size):
@@ -15,6 +15,17 @@ class SphericalCheb(nn.Module):
 
     def forward(self, x):
         x = self.spherical_cheb(x)
+        x = self.ReLU(x)
+        return x
+    
+class PatchSphericalCheb(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+        self.pspherical_cheb = PatchSphericalChebConv(in_channels, out_channels,kernel_size)
+        self.ReLU = nn.LeakyReLU(0.2)
+
+    def forward(self, x, lap):
+        x = self.pspherical_cheb(x, lap)
         x = self.ReLU(x)
         return x
 
