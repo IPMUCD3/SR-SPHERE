@@ -10,6 +10,7 @@ from maploader import MapDataset
 class template(pl.LightningModule):
     def __init__(self, params):
         super().__init__()
+        
         self.kernel_size = params.kernel_size
         self.len_val = params.len_val
         self.len_train = params.len_train

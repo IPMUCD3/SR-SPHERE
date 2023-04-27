@@ -26,7 +26,7 @@ def gen_alm(low_nside, cl, lmax, seed, alm_dir):
     return alm_clipped, lclip
     
 def main():
-    base_dir = "/Users/tokiwaakira/workspace/SR-SPHERE/a.tokiwa/data/"
+    base_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE-1/a.tokiwa/data/"
     n_gen = 100
     cl_dir = base_dir + "COM_PowerSpect_CMB-base-plikHM-TTTEEE-lowl-lowE-lensing-minimum-theory_R3.01.txt"
     alm_dir = base_dir + "HR/alm/"
