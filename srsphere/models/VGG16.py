@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 from srsphere.utils.partial_laplacians import get_partial_laplacians
-from deepsphere_pytorch.deepsphere.layers.samplings.healpix_pool_unpool import Healpix
+from srsphere.utils.healpix_pool_unpool import Healpix
 from srsphere.models.ResUnet import Block
 
 

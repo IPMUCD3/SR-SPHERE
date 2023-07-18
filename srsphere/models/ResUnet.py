@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from srsphere.utils.cheby_shev import SphericalChebConv
 from srsphere.utils.partial_laplacians import get_partial_laplacians
-from deepsphere_pytorch.deepsphere.layers.samplings.healpix_pool_unpool import Healpix
+from srsphere.utils.healpix_pool_unpool import Healpix
 from srsphere.models.model_template import template
 
 
@@ -45,7 +45,8 @@ class Unet(template):
         super().__init__(params)
 
         self.dim = 64
-        self.dim_mults = [1, 2, 4, 8]
+        self.dim_factor_mults = [1, 2, 4, 8]
+        self.dim_mults = [self.dim * factor for factor in self.dim_factor_mults]
         self.kernel_size = params["kernel_size"]
         self.nside = params["nside_lr"]
         self.order = params["order"]
