@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train
+#SBATCH --job-name=result
 #SBATCH --account=akira.tokiwa
 #SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/log/%j.out  
 #SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/log/%j.err  
@@ -18,5 +18,4 @@ source ~/.bashrc
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE-1/a.tokiwa/
-python3 ./run_PM.py
-#python3 ./model_training.py --model test_oneconv --patience 30
+python3 ./generate_resmap.py

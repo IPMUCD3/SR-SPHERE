@@ -11,12 +11,7 @@
 #SBATCH --mail-type=END,FAIL
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=2 # where X is the GPU id of an available GPU
+export CUDA_VISIBLE_DEVICES=4 # where X is the GPU id of an available GPU
 
-# activate python environment
-source ~/.bashrc
-conda activate pylit
-
-cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE-1/a.tokiwa/
-python3 ./run_PM.py
-#python3 ./model_training.py --model test_oneconv --patience 30
+cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE-1/srsphere/run/
+/gpfs02/work/akira.tokiwa/gpgpu/anaconda3/envs/pylit/bin/python ./run_ResUnet.py
