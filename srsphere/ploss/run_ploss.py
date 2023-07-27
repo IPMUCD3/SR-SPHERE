@@ -1,6 +1,8 @@
 # Refactored code
 import datetime
+import argparse
 import sys
+import torch.nn as nn
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -10,7 +12,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 sys.path.append('/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/')
 from srsphere.data.maploader import get_loaders_from_params
 from srsphere.tests.params import get_params
-from srsphere.models.VGG16 import PerceptualLoss
+from srsphere.ploss.perceptualloss import PerceptualLoss
 from srsphere.models.ResUnet import Unet
 
 
@@ -23,19 +25,20 @@ def setup_trainer(params, logger=None, patience=30):
         mode="min"
     )
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    current_time = datetime.datetime.now().strftime("%Y%m%d")
 
     checkpoint_callback = ModelCheckpoint(
-        filename=f"{current_time}-" + "{epoch:02d}-{val_loss:.2f}",
-        save_top_k=3,
+        filename=f"{current_time}-" + "{epoch:02d}",
+        save_top_k=1,
         monitor="val_loss",
-        save_last=True,
+        save_last=False,
         mode="min"
     )
 
     trainer = pl.Trainer(
         max_epochs=params['num_epochs'],
-        callbacks=[checkpoint_callback, early_stop_callback],
+        callbacks=[checkpoint_callback],
+        #callbacks=[checkpoint_callback, early_stop_callback],
         num_sanity_val_steps=0,
         accelerator='gpu', devices=1,
         logger=logger
@@ -43,31 +46,67 @@ def setup_trainer(params, logger=None, patience=30):
     return trainer
 
 
-def train_model(model_class, params=None, logger=None, ckpt_path=None):
+def train_model(model_class, params, logger=None, **args):
     """Train the model."""
-    if params is None:
-        params = get_params()
     train_loader, val_loader = get_loaders_from_params(params)
-    model = model_class(params, ckpt_path=ckpt_path)
+    model = model_class(params, **args)
     if logger is None:
         logger = TensorBoardLogger(save_dir='.')
     trainer = setup_trainer(params, logger)
     trainer.fit(model, train_loader, val_loader)
     return model
 
+class PerceptualLoss_plus(nn.Module):
+    def __init__(self, model="VGG16", add_loss="mse", lambda_=0.1):
+        super().__init__()
+        self.ploss = PerceptualLoss(model=model)
+        self.lambda_ = lambda_
+        if add_loss == "mse":
+            self.add_loss = nn.MSELoss()
+        elif add_loss == "l1":
+            self.add_loss = nn.L1Loss()
 
+    def forward(self, output, target):
+        ploss = self.ploss(output, target)
+        add_loss = self.add_loss(output, target)
+        loss = self.lambda_ * ploss + add_loss
+        return loss
+        
+    
 class Unet_ploss(Unet):
     """U-Net model with perceptual loss."""
-    def __init__(self, params, ckpt_path=None):
+    def __init__(self, params, **args):
         super().__init__(params)
-        if ckpt_path is not None:
-            try:
-                self.loss_fn = PerceptualLoss(params, ckpt_path=ckpt_path)
-            except Exception as e:
-                print(f"Error loading checkpoint: {e}")
-                self.loss_fn = PerceptualLoss(params)
+        if args.get('loss_fn') is not None:
+            if args.get('loss_fn') == 'mse':
+                self.loss_fn = nn.MSELoss()
+            elif args.get('loss_fn') == 'l1':
+                self.loss_fn = nn.L1Loss()
+            elif args.get('loss_fn') == 'ploss':
+                self.loss_fn = PerceptualLoss()
+            elif args.get('loss_fn') == 'ploss_mse':
+                self.loss_fn = PerceptualLoss_plus(add_loss='mse')
+            elif args.get('loss_fn') == 'ploss_l1':
+                self.loss_fn = PerceptualLoss_plus(add_loss='l1')
+            else:
+                raise ValueError('Invalid loss function.')
+        else:
+            raise ValueError('Loss function not specified.')
 
 
 if __name__ == '__main__':
-    logger = TensorBoardLogger(save_dir='/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/run/')
-    model = train_model(Unet_ploss, logger=logger)
+    args = argparse.ArgumentParser()
+    args.add_argument('--loss_fn', type=str, default='mse')
+    args.add_argument('--num_epochs', type=int, default=10)
+    args.add_argument('--batch_size', type=int, default=32)
+    args.add_argument('--model_name', type=str, default='unet_mse')
+    args = args.parse_args()
+
+    pl.seed_everything(1234)
+    base_logdir = '/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/log/'
+    logger = TensorBoardLogger(save_dir=base_logdir, name=args.model_name)
+
+    params = get_params()
+    params['num_epochs'] = args.num_epochs
+    params['batch_size'] = args.batch_size
+    model = train_model(Unet_ploss, params=params, logger=logger, loss_fn=args.loss_fn)

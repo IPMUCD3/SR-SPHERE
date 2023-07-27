@@ -11,3 +11,5 @@ srsphere/run/lightning_logs
 srsphere/sr_diffusion
 srsphere/tests/__pycache__
 srsphere/utils/__pycache__
+srsphere/log
+srsphere/run/slurm_log

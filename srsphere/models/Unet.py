@@ -3,7 +3,7 @@ import torch.nn as nn
 from srsphere.utils.cheby_shev import SphericalChebConv
 from srsphere.models.model_template import template
 from srsphere.utils.partial_laplacians import get_partial_laplacians
-from deepsphere_pytorch.deepsphere.layers.samplings.healpix_pool_unpool import Healpix
+from srsphere.utils.healpix_pool_unpool import Healpix
 
 
 class SphericalCheb(nn.Module):

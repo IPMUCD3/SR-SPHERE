@@ -4,7 +4,7 @@ from srsphere.utils.partial_laplacians import get_partial_laplacians
 from srsphere.utils.cheby_shev import SphericalChebConv
 from torch import nn
 
-class test_twoconv(template):
+class test_threeconv(template):
     def __init__(self, params):
         super().__init__(params)
         self.kernel_size= params["kernel_size"]

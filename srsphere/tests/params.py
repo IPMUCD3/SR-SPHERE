@@ -27,14 +27,15 @@ def get_params(verbose=False):
     # Training.
     params['num_epochs'] = 1000  # Number of passes through the training data.
     params['batch_size'] = 1   # Constant quantity of information (#pixels) per step (invariant to sample size).
-    params['steps_per_epoch'] = params['num_epochs'] * params['N_train'] // params['batch_size']
-    params['lr_init'] = 1*10**-7
+    params['lr_init'] = 1*10**-3
     params['lr_max'] = 1*10**-2
     
     if params['issplit']:
         params['N_train'] = int(params['n_maps']*(12 * params['order']**2)*params['rate_train'])
         params['N_val'] = int(params['n_maps']*(12 * params['order']**2) - params['N_train'])
-        params['batch_size'] = 64
+        params['batch_size'] = 128
+
+    params['steps_per_epoch'] = params['N_train'] // params['batch_size']
     
     if verbose:
         print('#LRsides: {0}, HRsides: {1} '.format(params['nside_lr'], params['nside_hr']))

@@ -58,14 +58,35 @@ class Unet(template):
 
         self.init_conv = SphericalChebConv(1, self.dim, self.laps[-1], self.kernel_size)
 
-        self.down_blocks = nn.ModuleList([ResnetBlock(dim_in, dim_out, lap, self.kernel_size) for dim_in, dim_out, lap in zip([self.dim] + self.dim_mults[:-1], self.dim_mults, reversed(self.laps))])
-        self.downsamplers = nn.ModuleList([self.pooling for _ in range(self.depth - 1)] + [nn.Identity()])
+        self.down_blocks = nn.ModuleList([])
+        for dim_in, dim_out, lap in zip([self.dim] + self.dim_mults[:-1], self.dim_mults, reversed(self.laps)):
+            is_last = dim_out == self.dim_mults[-1]
+
+            self.down_blocks.append(
+                nn.ModuleList(
+                    [
+                        ResnetBlock(dim_in, dim_out, lap, self.kernel_size),
+                        ResnetBlock(dim_out, dim_out, lap, self.kernel_size),
+                        self.pooling if not is_last else nn.Identity(),
+                    ]
+                )
+            )
 
         self.mid_block1 = ResnetBlock(self.dim_mults[-1], self.dim_mults[-1], self.laps[0], self.kernel_size)
         self.mid_block2 = ResnetBlock(self.dim_mults[-1], self.dim_mults[-1], self.laps[0], self.kernel_size)
 
-        self.upsamplers = nn.ModuleList([self.unpooling for _ in range(self.depth - 1)] + [nn.Identity()])
-        self.up_blocks = nn.ModuleList([ResnetBlock(dim_in*2, dim_out, lap, self.kernel_size) for dim_in, dim_out, lap in zip(reversed(self.dim_mults[:-1]), reversed([self.dim] + self.dim_mults[:-1]), self.laps)])
+        self.up_blocks = nn.ModuleList([])
+        for dim_in, dim_out, lap in zip(reversed(self.dim_mults), reversed([self.dim] + self.dim_mults[:-1]), self.laps):
+            is_last = dim_in == self.dim_mults[0]
+            self.up_blocks.append(
+                nn.ModuleList(
+                    [
+                        ResnetBlock(dim_in*2, dim_out, lap, self.kernel_size),
+                        ResnetBlock(dim_out, dim_out, lap, self.kernel_size),
+                        self.unpooling if not is_last else nn.Identity(),
+                    ]
+                )
+            )
 
         self.final_conv = nn.Sequential(
             ResnetBlock(self.dim, self.dim, self.laps[-1], self.kernel_size), 
@@ -78,8 +99,9 @@ class Unet(template):
         skip_connections = []
 
         # downsample
-        for down_block, downsample in zip(self.down_blocks, self.downsamplers):
-            x = down_block(x)
+        for block1, block2, downsample in self.down_blocks:
+            x = block1(x)
+            x = block2(x)
             skip_connections.append(x)
             x = downsample(x)
 
@@ -87,9 +109,10 @@ class Unet(template):
         x = self.mid_block2(self.mid_block1(x))
 
         # upsample
-        for up_block, upsample in zip(self.up_blocks, self.upsamplers):
+        for block1, block2, upsample  in self.up_blocks:
+            tmp_connection = skip_connections.pop()
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = block2(block1(x))
             x = upsample(x)
-            x = torch.cat((x, skip_connections.pop()), dim=2)
-            x = up_block(x)
 
         return self.final_conv(x)
