@@ -11,6 +11,6 @@
 #SBATCH --mail-type=END,FAIL
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=4 # where X is the GPU id of an available GPU
-cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/ploss
+export CUDA_VISIBLE_DEVICES=5 # where X is the GPU id of an available GPU
+cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/run
 /gpfs02/work/akira.tokiwa/gpgpu/anaconda3/envs/pylit/bin/python ./run_ploss.py --loss_fn ploss_mse --batch_size 128 --model_name resUnet_ploss_wMSE

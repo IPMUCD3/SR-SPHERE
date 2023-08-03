@@ -14,7 +14,7 @@ class Block(nn.Module):
         super().__init__()
         self.conv = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size)
         self.norm = nn.GroupNorm(num_groups, out_channels)
-        self.act = nn.PReLU() if out_channels > 1 else nn.Identity()
+        self.act = nn.LeakyReLU(0.1) if out_channels > 1 else nn.Identity()
 
     def forward(self, x):
         x = self.conv(x)

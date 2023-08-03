@@ -12,5 +12,5 @@
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=2 # where X is the GPU id of an available GPU
-cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/ploss
+cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/run
 /gpfs02/work/akira.tokiwa/gpgpu/anaconda3/envs/pylit/bin/python ./run_ploss.py --loss_fn ploss --batch_size 128 --model_name resUnet_ploss

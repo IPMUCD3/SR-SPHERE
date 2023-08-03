@@ -4,7 +4,7 @@ from srsphere.utils.partial_laplacians import get_partial_laplacians
 from srsphere.utils.cheby_shev import SphericalChebConv
 from torch import nn
 
-class test_threeconv(template):
+class threeconv(template):
     def __init__(self, params):
         super().__init__(params)
         self.kernel_size= params["kernel_size"]
@@ -12,7 +12,7 @@ class test_threeconv(template):
         self.conv_in = SphericalChebConv(1, 64, self.laps[0], self.kernel_size)
         self.conv_mid = SphericalChebConv(64, 64, self.laps[0], self.kernel_size)
         self.conv_out = SphericalChebConv(64, 1, self.laps[0], self.kernel_size)
-        self.ReLU = nn.PReLU()
+        self.ReLU = nn.LeakyReLU(0.1)
     
     def forward(self, x):
         x = self.ReLU(self.conv_in(x))

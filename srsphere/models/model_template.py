@@ -29,5 +29,6 @@ class template(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr_init)
-        scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr_max, epochs = self.epochs, steps_per_epoch=self.steps_per_epoch)
+        #scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr_max, epochs = self.epochs, steps_per_epoch=self.steps_per_epoch)
+        scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
         return {"optimizer": optimizer, "lr_scheduler": scheduler}  

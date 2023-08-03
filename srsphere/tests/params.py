@@ -27,7 +27,7 @@ def get_params(verbose=False):
     # Training.
     params['num_epochs'] = 1000  # Number of passes through the training data.
     params['batch_size'] = 1   # Constant quantity of information (#pixels) per step (invariant to sample size).
-    params['lr_init'] = 1*10**-3
+    params['lr_init'] = 1*10**-5
     params['lr_max'] = 1*10**-2
     
     if params['issplit']:

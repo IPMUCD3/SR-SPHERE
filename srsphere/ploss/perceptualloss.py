@@ -14,7 +14,7 @@ def weights_init(m, patch_size=1024):
         m.bias.data.fill_(0)
 
 class PerceptualLoss(nn.Module):
-    def __init__(self, model="VGG16"):
+    def __init__(self, model="VGG16", loss="mse"):
         super().__init__()
 
         # Initialize VGG16 model
@@ -28,7 +28,10 @@ class PerceptualLoss(nn.Module):
             param.requires_grad = False
 
         # Define loss function
-        self.mse_loss = nn.MSELoss()
+        if loss == "mse":
+            self.loss_fn = nn.MSELoss()
+        elif loss == "l1":
+            self.loss_fn = nn.L1Loss()
 
     def forward(self, output, target):
         # Extract features from output and target
@@ -39,7 +42,23 @@ class PerceptualLoss(nn.Module):
         assert features_out and features_target, "No features extracted. Check the input and model architecture."
 
         # Compute loss for each pair of feature maps
-        losses = [self.mse_loss(out, tgt) for out, tgt in zip(features_out, features_target)]
+        losses = [self.loss_fn(out, tgt) for out, tgt in zip(features_out, features_target)]
 
         # Return the average loss
         return sum(losses) / len(losses)
+    
+class PerceptualLoss_plus(nn.Module):
+    def __init__(self, model="VGG16", add_loss="mse", lambda_=0.1):
+        super().__init__()
+        self.ploss = PerceptualLoss(model=model, loss=add_loss)
+        self.lambda_ = lambda_
+        if add_loss == "mse":
+            self.add_loss = nn.MSELoss()
+        elif add_loss == "l1":
+            self.add_loss = nn.L1Loss()
+
+    def forward(self, output, target):
+        ploss = self.ploss(output, target)
+        add_loss = self.add_loss(output, target)
+        loss = self.lambda_ * ploss + add_loss
+        return loss

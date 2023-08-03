@@ -62,3 +62,94 @@ class VGG(pl.LightningModule):
         assert features, "No features extracted. Check the model architecture."
 
         return features
+    
+class VGG_Unet(pl.LightningModule):
+    def __init__(self, nside=64, order=2, depth=5, kernel_size=30, model="VGG16"):
+        super().__init__()
+
+        # Initialize parameters
+        self.nside = nside
+        self.order = order
+        self.depth = depth
+        self.kernel_size = kernel_size
+
+        # Compute partial laplacians
+        self.laps = get_partial_laplacians(self.nside, self.depth, self.order, 'normalized')
+
+        # Define blocks of layers
+        if model == "VGG16":
+            self.encoder = nn.ModuleList([
+                self._make_block(1, 64, self.laps[4]),
+                self._make_block(64, 128, self.laps[3]),
+                self._make_block(128, 256, self.laps[2], num_layers=3),
+                self._make_block(256, 512, self.laps[1], num_layers=3),
+                self._make_block(512, 512, self.laps[0], num_layers=3),
+            ])
+            self.decoder = nn.ModuleList([
+                self._make_block(512, 512, self.laps[0], num_layers=3),
+                self._make_block(512, 256, self.laps[1], num_layers=3),
+                self._make_block(256, 128, self.laps[2], num_layers=3),
+                self._make_block(128, 64, self.laps[3]),
+                self._make_block(64, 1, self.laps[4]),
+            ])
+        elif model == "VGG19":
+            self.encoder = nn.ModuleList([
+                self._make_block(1, 64, self.laps[4]),
+                self._make_block(64, 128, self.laps[3]),
+                self._make_block(128, 256, self.laps[2], num_layers=4),
+                self._make_block(256, 512, self.laps[1], num_layers=4),
+                self._make_block(512, 512, self.laps[0], num_layers=4),
+            ])
+            self.decoder = nn.ModuleList([
+                self._make_block(512*2, 512, self.laps[0], num_layers=4),
+                self._make_block(512*2, 256, self.laps[1], num_layers=4),
+                self._make_block(256*2, 128, self.laps[2], num_layers=4),
+                self._make_block(128*2, 64, self.laps[3]),
+                self._make_block(64, 1, self.laps[4]),
+            ])
+
+        self.bottleneck = self._make_block(512, 512, self.laps[0], num_layers=2)
+
+        # Define pooling operation
+        self.pooling = Healpix().pooling
+        self.unpooling = Healpix().unpooling
+
+    def _make_block(self, in_channels, out_channels, laplacian, num_layers=2):
+        # Create a block of layers with optional pooling
+        layers = [
+            Block(in_channels, out_channels, laplacian, self.kernel_size) if (n==0) 
+            else Block(out_channels, out_channels, laplacian, self.kernel_size) for n in range(num_layers)
+            ]
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        skip_connections = []
+
+        # downsample
+        for e1, e2, e3, e4, e5 in self.encoder:
+            x = e1(x)
+            skip_connections.append(x)
+            x = self.pooling(x)
+            x = e2(x)
+            skip_connections.append(x)
+            x = self.pooling(x)
+            x = e3(x)
+            skip_connections.append(x)
+            x = self.pooling(x)
+            x = e4(x)
+            skip_connections.append(x)
+            x = self.pooling(x)
+            x = e5(x)
+            skip_connections.append(x)
+
+        # bottleneck
+        x = self.bottleneck(x)
+
+        # upsample
+        for d1, d2, d3, d4, d5 in self.decoder:
+            tmp_connection = skip_connections.pop()
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = block2(block1(x))
+            x = upsample(x)
+
+        return self.final_conv(x)

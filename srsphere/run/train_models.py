@@ -12,11 +12,12 @@ from pytorch_lightning.loggers import TensorBoardLogger
 sys.path.append('/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/')
 from srsphere.data.maploader import get_loaders_from_params
 from srsphere.tests.params import get_params
-from srsphere.ploss.perceptualloss import PerceptualLoss
-from srsphere.models.ResUnet import Unet
+from srsphere.ploss.perceptualloss import PerceptualLoss, PerceptualLoss_plus
+from srsphere.models.Unet import SphericalUNet
+from srsphere.models.threeconv import threeconv
+from srsphere.models.model_template import template
 
-
-def setup_trainer(params, logger=None, patience=30):
+def setup_trainer(params, logger=None, patience=100):
     """Set up the PyTorch Lightning trainer."""
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
@@ -37,8 +38,8 @@ def setup_trainer(params, logger=None, patience=30):
 
     trainer = pl.Trainer(
         max_epochs=params['num_epochs'],
-        callbacks=[checkpoint_callback],
-        #callbacks=[checkpoint_callback, early_stop_callback],
+        #callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, early_stop_callback],
         num_sanity_val_steps=0,
         accelerator='gpu', devices=1,
         logger=logger
@@ -56,57 +57,53 @@ def train_model(model_class, params, logger=None, **args):
     trainer.fit(model, train_loader, val_loader)
     return model
 
-class PerceptualLoss_plus(nn.Module):
-    def __init__(self, model="VGG16", add_loss="mse", lambda_=0.1):
-        super().__init__()
-        self.ploss = PerceptualLoss(model=model)
-        self.lambda_ = lambda_
-        if add_loss == "mse":
-            self.add_loss = nn.MSELoss()
-        elif add_loss == "l1":
-            self.add_loss = nn.L1Loss()
-
-    def forward(self, output, target):
-        ploss = self.ploss(output, target)
-        add_loss = self.add_loss(output, target)
-        loss = self.lambda_ * ploss + add_loss
-        return loss
-        
-    
-class Unet_ploss(Unet):
-    """U-Net model with perceptual loss."""
+class selected_model(template):    
     def __init__(self, params, **args):
         super().__init__(params)
-        if args.get('loss_fn') is not None:
-            if args.get('loss_fn') == 'mse':
-                self.loss_fn = nn.MSELoss()
-            elif args.get('loss_fn') == 'l1':
-                self.loss_fn = nn.L1Loss()
-            elif args.get('loss_fn') == 'ploss':
-                self.loss_fn = PerceptualLoss()
-            elif args.get('loss_fn') == 'ploss_mse':
-                self.loss_fn = PerceptualLoss_plus(add_loss='mse')
-            elif args.get('loss_fn') == 'ploss_l1':
-                self.loss_fn = PerceptualLoss_plus(add_loss='l1')
+        if args.get('model') is not None:
+            if args.get('model') == "Unet":
+                self.model=SphericalUNet(params)
+            elif args.get('model') == "threeconv":
+                self.model=threeconv(params)
             else:
-                raise ValueError('Invalid loss function.')
+                raise ValueError("model must be specified")
         else:
-            raise ValueError('Loss function not specified.')
+            print("model is not specified. Use threeconv as default")
+            self.model=threeconv(params)
+        
+        if args.get('loss_fn') is not None:
+            if args.get('loss_fn') == "mse":
+                self.loss_fn=nn.MSELoss()
+            elif args.get('loss_fn') == "l1":
+                self.loss_fn=nn.L1Loss()
+            elif args.get('loss_fn') == "ploss":
+                self.loss_fn=PerceptualLoss()
+            elif args.get('loss_fn') == 'ploss_mse':
+                self.loss_fn = PerceptualLoss_plus(add_loss='mse', model="VGG16", lambda_=0.1)
+            elif args.get('loss_fn') == 'ploss_l1':
+                self.loss_fn = PerceptualLoss_plus(add_loss='l1', model="VGG16", lambda_=0.1)
+            else:
+                raise ValueError("loss_fn must be specified")
+        else:
+            print("loss_fn is not specified. Use mse as default")
+            self.loss_fn=nn.MSELoss()
 
-
+    def forward(self, x):
+        return self.model(x)
+    
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
+    args.add_argument('--model', type=str, default='threeconv')
     args.add_argument('--loss_fn', type=str, default='mse')
-    args.add_argument('--num_epochs', type=int, default=10)
+    args.add_argument('--num_epochs', type=int, default=1000)
     args.add_argument('--batch_size', type=int, default=32)
-    args.add_argument('--model_name', type=str, default='unet_mse')
     args = args.parse_args()
 
     pl.seed_everything(1234)
     base_logdir = '/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/log/'
-    logger = TensorBoardLogger(save_dir=base_logdir, name=args.model_name)
+    logger = TensorBoardLogger(save_dir=base_logdir, name=args.model+'_'+args.loss_fn)
 
     params = get_params()
     params['num_epochs'] = args.num_epochs
     params['batch_size'] = args.batch_size
-    model = train_model(Unet_ploss, params=params, logger=logger, loss_fn=args.loss_fn)
+    model=train_model(selected_model, params, logger, model=args.model, loss_fn=args.loss_fn)
