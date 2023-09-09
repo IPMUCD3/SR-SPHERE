@@ -87,21 +87,27 @@ class MapDataset(data.Dataset):
     def __len__(self):
         return self.len
 
+def get_datasets(map_dirs, n_maps, nsides, order=2, issplit=False, normalize=True):
+    datasets = {x: MapDataset(loc, n_maps, ns, order, issplit, normalize) for x, loc, ns in zip(('hr', 'lr'), map_dirs, nsides)}
+    data_hr = datasets['hr'].__getitem__(0)
+    data_lr = datasets['lr'].__getitem__(0)
+    return data_hr, data_lr
+
+def transform_combine(data_lr, data_hr):
+    RANGE_MIN, RANGE_MAX = data_lr.min().clone().detach(), data_lr.max().clone().detach()
+    transforms, inverse_transforms = get_minmax_transform(RANGE_MIN, RANGE_MAX)
+    combined_dataset = data.TensorDataset(transforms(data_lr), transforms(data_hr))
+    return combined_dataset
 
 def get_loaders(map_dirs, n_maps, nsides, rate_train, batch_size, order=2, issplit=False, normalize=True):
     """
     Function to get the loaders for training and validation datasets.
     """
-    datasets = {x: MapDataset(loc, n_maps, ns, order, issplit, normalize) for x, loc, ns in zip(('hr', 'lr'), map_dirs, nsides)}
-    len_train = int(datasets['hr'].len * rate_train)
-    len_val = datasets['hr'].len - len_train
+    data_hr, data_lr = get_datasets(map_dirs, n_maps, nsides, order, issplit, normalize)
+    len_train = int(rate_train * len(data_hr))
+    len_val = len(data_hr) - len_train
 
-    data_hr = datasets['hr'].__getitem__(0)
-    data_lr = datasets['lr'].__getitem__(0)
-
-    RANGE_MIN, RANGE_MAX = data_lr.min().clone().detach(), data_lr.max().clone().detach()
-    transforms, inverse_transforms = get_minmax_transform(RANGE_MIN, RANGE_MAX)
-    combined_dataset = data.TensorDataset(transforms(data_lr), transforms(data_hr))
+    combined_dataset = transform_combine(data_lr, data_hr)
     train, val = data.random_split(combined_dataset, [len_train, len_val])
     loaders = {x: data.DataLoader(ds, batch_size=batch_size, shuffle=x=='train', num_workers=os.cpu_count()) for x, ds in zip(('train', 'val'), (train, val))}
     

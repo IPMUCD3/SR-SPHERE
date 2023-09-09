@@ -13,3 +13,7 @@ srsphere/tests/__pycache__
 srsphere/utils/__pycache__
 srsphere/log
 srsphere/run/slurm_log
+srsphere/diffusion/__pycache__
+srsphere/diffusion/lightning_logs
+srsphere/diffusion/result
+srsphere/diffusion/checkpoint_0.pt
