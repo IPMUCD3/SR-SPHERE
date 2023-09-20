@@ -5,7 +5,7 @@ def get_params(verbose=False):
     
     #data info
     params["hrmaps_dir"]= "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/HR/z00/"
-    params["lrmaps_dir"]="/gpfs02/work/akira.tokiwa/gpgpu/FastPM/LR/z00//"
+    params["lrmaps_dir"]="/gpfs02/work/akira.tokiwa/gpgpu/FastPM/LR/z00/"
     params['nside_hr'] = 64
     params['nside_lr'] = 64
     

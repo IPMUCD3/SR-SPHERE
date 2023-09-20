@@ -97,7 +97,7 @@ def transform_combine(data_lr, data_hr):
     RANGE_MIN, RANGE_MAX = data_lr.min().clone().detach(), data_lr.max().clone().detach()
     transforms, inverse_transforms = get_minmax_transform(RANGE_MIN, RANGE_MAX)
     combined_dataset = data.TensorDataset(transforms(data_lr), transforms(data_hr))
-    return combined_dataset
+    return combined_dataset, inverse_transforms
 
 def get_loaders(map_dirs, n_maps, nsides, rate_train, batch_size, order=2, issplit=False, normalize=True):
     """

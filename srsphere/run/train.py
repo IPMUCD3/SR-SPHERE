@@ -1,5 +1,6 @@
 import datetime
 import pytorch_lightning as pl
+import torch
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -39,6 +40,7 @@ def train_model(model_class, params=None, logger=None):
         params = get_params()
     train_loader, val_loader = get_loaders_from_params(params)
     model = model_class(params)
+    model=torch.compile(model)
     if logger is None:
         logger = TensorBoardLogger(save_dir='.')
     trainer = setup_trainer(params, logger)

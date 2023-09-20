@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from srsphere.utils.partial_laplacians import get_partial_laplacians
 from srsphere.utils.healpix_pool_unpool import Healpix
 from srsphere.models.ResUnet import Block
-
+from srsphere.utils.cheby_shev import SphericalChebConv
 
 class VGG(pl.LightningModule):
     def __init__(self, nside=64, order=2, depth=5, kernel_size=30, model="VGG16"):
@@ -63,6 +63,37 @@ class VGG(pl.LightningModule):
 
         return features
     
+class VGG_cosmo(VGG):
+    def __init__(self, params):
+        self.nside = params["nside_hr"]
+        self.order = params["order"]
+        self.kernel_size = params["kernel_size"]
+        self.depth = 5
+        
+        super().__init__(self.nside, self.order, self.depth, self.kernel_size, model="VGG16")
+        self.n_params = 4 # Omega_m, Omega_b, sigma_8, h
+        self.patch_size = (self.nside // self.order) ** 2
+        self.final_size = self.patch_size // (4 ** (self.depth-1))
+
+        self.block1 = Block(512, 512, self.laps[0], self.kernel_size)
+        self.block2 = Block(512, 512, self.laps[0], self.kernel_size)
+        self.sconv = SphericalChebConv(512, 1, self.laps[0], self.kernel_size)
+
+        self.econv = nn.Linear(self.final_size, self.n_params)
+
+    def forward(self, x):
+        for block in self.blocks:
+            x = block(x)
+            # Do not pool after the last block
+            if block != self.blocks[-1]:
+                x = self.pool(x)
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.sconv(x)
+        x = torch.squeeze(x, dim=2)
+        x = self.econv(x)
+        return x
+
 class VGG_Unet(pl.LightningModule):
     def __init__(self, nside=64, order=2, depth=5, kernel_size=30, model="VGG16"):
         super().__init__()
@@ -149,7 +180,24 @@ class VGG_Unet(pl.LightningModule):
         for d1, d2, d3, d4, d5 in self.decoder:
             tmp_connection = skip_connections.pop()
             x = torch.cat([x, tmp_connection], dim=2)
-            x = block2(block1(x))
-            x = upsample(x)
+            x = self.unpooling(x)
+            x = d1(x)
+            tmp_connection = skip_connections.pop()
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = self.unpooling(x)
+            x = d2(x)
+            tmp_connection = skip_connections.pop()
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = self.unpooling(x)
+            x = d3(x)
+            tmp_connection = skip_connections.pop()
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = self.unpooling(x)
+            x = d4(x)
+            tmp_connection = skip_connections.pop()
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = self.unpooling(x)
+            x = d5(x)
+
 
         return self.final_conv(x)

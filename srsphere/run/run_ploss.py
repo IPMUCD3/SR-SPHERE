@@ -2,6 +2,7 @@
 import datetime
 import argparse
 import sys
+import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping

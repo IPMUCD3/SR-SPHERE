@@ -17,3 +17,7 @@ srsphere/diffusion/__pycache__
 srsphere/diffusion/lightning_logs
 srsphere/diffusion/result
 srsphere/diffusion/checkpoint_0.pt
+srsphere/diffusion/.ipynb_checkpoints
+srsphere/statistics/__pycache__
+srsphere/statistics/log
+srsphere/statistics/result

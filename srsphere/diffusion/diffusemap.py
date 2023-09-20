@@ -41,8 +41,10 @@ if __name__ == '__main__':
     map_dirs = [config_dict['data']['hrmaps_dir'], config_dict['data']['lrmaps_dir']]
     nsides = [config_dict['data']['nside_hr'], config_dict['data']['nside_lr']]
     data_lr, data_hr = get_datasets(map_dirs, n_maps, nsides, config_dict['data']['order'], config_dict['data']['issplit'], config_dict['data']['normalize'])
-    combined_dataset = transform_combine(data_hr - data_lr, data_lr)
+    combined_dataset, inverse_transforms = transform_combine(data_hr - data_lr, data_lr)
+    map_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/diffusion/result/"
 
+    """
     for i in range(config_dict['data']['n_maps']):
         print(i)
         tmp_sample =combined_dataset.tensors[0][48*i:48*(i+1)].to(device)
@@ -52,6 +54,23 @@ if __name__ == '__main__':
         for j in tqdm(reversed(range(0, timesteps)), desc='sampling loop time step', total=timesteps):
             t = torch.full((48,), j, device=device, dtype=torch.long)
             img = tmp_diffusion.p_sample(model.model, img, t, tmp_lr, j)
+            if j % 10 == 0:
+                diffmap = np.hstack(img.detach().cpu().numpy()[:48, : , 0])
         diffmap = np.hstack(img.detach().cpu().numpy()[:48, : , 0])
-        map_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/diffusion/result/"
+        
         hp.write_map(map_dir+"diffused_{}.fits".format(i), diffmap, overwrite=True)
+    """
+
+    i = 0
+    tmp_sample =combined_dataset.tensors[0][48*i:48*(i+1)].to(device)
+    tmp_lr = combined_dataset.tensors[1][48*i:48*(i+1)].to(device)
+    q_sample = tmp_diffusion.q_sample(tmp_sample, torch.full((48,), timesteps-1, device=device))
+    img = torch.randn(tmp_sample.shape, device=device)
+    for j in tqdm(reversed(range(0, timesteps//2)), desc='sampling loop time step', total=timesteps//2):
+        t = torch.full((48,), j, device=device, dtype=torch.long)
+        img = tmp_diffusion.p_sample(model.model, img, t, tmp_lr, j)
+        if j % 10 == 0:
+            diffmap = np.hstack(inverse_transforms(img).detach().cpu().numpy()[:48, : , 0])
+            hp.write_map(map_dir+"diffused_step{}.fits".format(j), diffmap, overwrite=True)
+    diffmap = np.hstack(inverse_transforms(img).detach().cpu().numpy()[:48, : , 0])
+    hp.write_map(map_dir+"diffused_step{}.fits".format(j), diffmap, overwrite=True)

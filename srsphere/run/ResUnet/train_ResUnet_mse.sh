@@ -11,6 +11,6 @@
 #SBATCH --mail-type=END,FAIL
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=1 # where X is the GPU id of an available GPU
+export CUDA_VISIBLE_DEVICES=2 # where X is the GPU id of an available GPU
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/srsphere/run
-/gpfs02/work/akira.tokiwa/gpgpu/anaconda3/envs/pylit/bin/python ./run_ploss.py --loss_fn mse --batch_size 32 --model_name resUnet_mse
+/gpfs02/work/akira.tokiwa/gpgpu/anaconda3/envs/pylit/bin/python ./run_ploss.py --loss_fn mse --batch_size 96 --model_name resUnet_mse
