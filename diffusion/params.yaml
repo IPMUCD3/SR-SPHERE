@@ -1,0 +1,41 @@
+data:
+  hrmaps_dir: "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/HR/"
+  lrmaps_dir: "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/LR/"
+  nside_hr: 64
+  nside_lr: 64
+  n_maps: 100
+  rate_train: 0.8
+  order: 2
+  issplit: True
+  normalize: False
+  conditional: False
+  transforms: 'minmax'
+
+architecture:
+  model: baseline
+  dim_mults:
+    - 1
+    - 2
+    - 4
+    - 8
+  init_conv: True
+  unet_dim: 64
+  kernel_size: 30
+  
+diffusion:
+  beta_schedule: linear_beta_schedule
+  schedule_args:
+    beta_start: 0.0001
+    beta_end: 0.02
+  timesteps: 1000
+  sampler_args:
+    sampler_type: 'uniform'
+
+train:
+  num_epochs: 500
+  batch_size: 96
+  optimizer: Adam
+  lr_init: 1e-5
+  lr_max: 1e-3
+  learning_rate: 6e-5
+  loss_type: huber

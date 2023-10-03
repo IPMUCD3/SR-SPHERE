@@ -55,7 +55,7 @@ class MapDataset(data.Dataset):
         self.issplit = issplit
         self.normalize = normalize
         self.npix = hp.nside2npix(self.nside)
-        self.maps = sorted(glob.glob(f'{mapdir}*.fits'), key=lambda x: (get_file_info(x, 1), get_file_info(x, 2)))[:self.n_maps]
+        self.maps = sorted(glob.glob(f'{mapdir}*.fits'))[:self.n_maps]
         self.ringorder = hp.nest2ring(self.nside, np.arange(self.npix))
         self.len = self.n_maps * (PIXEL_AREA_MULTIPLIER*self.order**2 if self.issplit else 1)
         self.mean = 0
