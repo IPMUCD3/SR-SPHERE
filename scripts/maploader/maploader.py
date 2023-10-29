@@ -1,11 +1,10 @@
 import os
-import glob
+from glob import glob
 import numpy as np
 import torch
 import healpy as hp
 import torch.utils.data as data
 from torchvision.transforms import Compose, ToTensor, Normalize
-
 
 # Constants
 PIXEL_AREA_MULTIPLIER = 12  # The pixel area is defined by 12*order^2
@@ -48,77 +47,52 @@ class MapDataset(data.Dataset):
     """
     Class for the map dataset.
     """
-    def __init__(self, mapdir, n_maps, nside, order=2, issplit=True, normalize=False):
+    def __init__(self, mapdir, n_maps, nside, order=2):
         self.nside = nside
         self.n_maps = n_maps
         self.order = order
-        self.issplit = issplit
-        self.normalize = normalize
         self.npix = hp.nside2npix(self.nside)
-        self.maps = sorted(glob.glob(f'{mapdir}*.fits'))[:self.n_maps]
-        self.ringorder = hp.nest2ring(self.nside, np.arange(self.npix))
-        self.len = self.n_maps * (PIXEL_AREA_MULTIPLIER*self.order**2 if self.issplit else 1)
-        self.mean = 0
-        self.std = 1
+        self.data_shape = (self.n_maps, self.npix, 1)
+        self.maps = sorted(glob(f'{mapdir}*.fits'))[:self.n_maps]
+        self.patch_flag = False
 
-    def __getitem__(self, index):
-        dmaps = [hp.read_map(dmap) for dmap in self.maps]
-        data = np.vstack([dmap for dmap in dmaps])
-        
-        if self.issplit:
-            data = np.vstack([hp_split(el, order=self.order) for el in data])
-            shape = (self.n_maps*self.order**2*PIXEL_AREA_MULTIPLIER, self.npix//(self.order**2*PIXEL_AREA_MULTIPLIER), 1)
-        else:
-            shape = (self.n_maps, self.npix, 1)
-        
-        tensor_map = ToTensor()(data).view(*shape).float()
-        
-        if self.normalize:
-            tensor_map = self.normalize_map(tensor_map)
-        
-        return tensor_map
+    def get_numpymap(self):
+        map_stacked = np.vstack([hp.read_map(dmap) for dmap in self.maps])
+        return map_stacked
+    
+    def maps2patches(self, map_stacked):
+        map_patches = np.vstack([hp_split(el, order=self.order) for el in map_stacked])
+        self.patch_flag = True
+        return map_patches
 
-    def normalize_map(self, tensor_map):
-        self.mean = tensor_map.mean().item()
-        self.std = tensor_map.std().item()
-        
-        return Normalize(mean=[self.mean], std=[self.std])(tensor_map)
+    def get_tensormap(self, map_stacked):
+        if self.patch_flag:
+            self.data_shape = (self.n_maps*self.order**2*PIXEL_AREA_MULTIPLIER, self.npix//(self.order**2*PIXEL_AREA_MULTIPLIER), 1)
+        tensor_map = ToTensor()(map_stacked).view(*self.data_shape).float()
+        return tensor_map    
+    
+def get_data(map_dir, n_map, nside, order=2, issplit=False):
+    dataset = MapDataset(map_dir, n_map, nside, order)
+    data_loaded_np = dataset.get_numpymap()
+    if issplit:
+        data_loaded_np = dataset.maps2patches(data_loaded_np)
+    data_loaded = dataset.get_tensormap(data_loaded_np)
+    return data_loaded
 
-    def __len__(self):
-        return self.len
+def get_minmaxnormalized_data(data_loaded):
+    range_min, range_max = data_loaded.min().clone().detach(), data_loaded.max().clone().detach()
+    transforms, inverse_transforms = get_minmax_transform(range_min, range_max)
+    data_normalized = transforms(data_loaded)
+    return data_normalized, inverse_transforms, range_min, range_max
 
-def get_datasets(map_dirs, n_maps, nsides, order=2, issplit=False, normalize=True):
-    datasets = {x: MapDataset(loc, n_maps, ns, order, issplit, normalize) for x, loc, ns in zip(('hr', 'lr'), map_dirs, nsides)}
-    data_hr = datasets['hr'].__getitem__(0)
-    data_lr = datasets['lr'].__getitem__(0)
-    return data_hr, data_lr
-
-def transform_combine(data_lr, data_hr):
-    RANGE_MIN, RANGE_MAX = data_lr.min().clone().detach(), data_lr.max().clone().detach()
-    transforms, inverse_transforms = get_minmax_transform(RANGE_MIN, RANGE_MAX)
-    combined_dataset = data.TensorDataset(transforms(data_lr), transforms(data_hr))
-    return combined_dataset, inverse_transforms
-
-def get_loaders(map_dirs, n_maps, nsides, rate_train, batch_size, order=2, issplit=False, normalize=True):
+def get_loaders(data_input, data_condition, rate_train, batch_size):
     """
     Function to get the loaders for training and validation datasets.
     """
-    data_hr, data_lr = get_datasets(map_dirs, n_maps, nsides, order, issplit, normalize)
-    len_train = int(rate_train * len(data_hr))
-    len_val = len(data_hr) - len_train
-
-    combined_dataset = transform_combine(data_lr, data_hr)
+    combined_dataset = data.TensorDataset(data_input, data_condition)
+    len_train = int(rate_train * len(data_input))
+    len_val = len(data_input) - len_train
     train, val = data.random_split(combined_dataset, [len_train, len_val])
     loaders = {x: data.DataLoader(ds, batch_size=batch_size, shuffle=x=='train', num_workers=os.cpu_count()) for x, ds in zip(('train', 'val'), (train, val))}
     
     return loaders['train'], loaders['val']
-
-
-def get_loaders_from_params(params):
-    """
-    Function to get the loaders for training and validation datasets using parameters.
-    """
-    map_dirs = [params['hrmaps_dir'], params['lrmaps_dir']]
-    nsides = [params['nside_hr'], params['nside_lr']]
-    
-    return get_loaders(map_dirs, params['n_maps'], nsides, params['rate_train'], params['batch_size'], params['order'], params['issplit'], params['normalize'])

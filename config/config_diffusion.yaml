@@ -1,12 +1,12 @@
 data:
-  hrmaps_dir: "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/HR/"
-  lrmaps_dir: "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/LR/"
-  nside_hr: 64
-  nside_lr: 64
+  hrmaps_dir: "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc256/"
+  lrmaps_dir: "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc128/"
+  nside_hr: 512
+  nside_lr: 512
   n_maps: 100
   rate_train: 0.8
-  order: 2
-  issplit: True
+  order: 4
+  issplit: False
   normalize: False
   conditional: False
   transforms: 'minmax'

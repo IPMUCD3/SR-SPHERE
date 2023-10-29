@@ -5,72 +5,19 @@ https://github.com/lucidrains/denoising-diffusion-pytorch
 https://github.com/hojonathanho/diffusion
 '''
 
-import os   
 import sys
-import yaml
 import torch
-import datetime
 import pickle
+from glob import glob
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 sys.path.append('/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/scripts')
 from diffusion.diffusionclass import Diffusion
 from diffusion.schedules import TimestepSampler, linear_beta_schedule
 from diffusion.ResUnet_timeembed import Unet
-from maploader.maploader import MapDataset, get_minmax_transform
-
-
-def prepare_data(params):
-    lr_set = MapDataset(params['lrmaps_dir'], params['n_maps'],  params['nside_lr'], params['order'], params['issplit'], params["normalize"])
-    hr_set = MapDataset(params['hrmaps_dir'], params['n_maps'],  params['nside_hr'], params['order'],params['issplit'], params["normalize"])
-    lr_set.maps = sorted(lr_set.maps)
-    hr_set.maps = sorted(hr_set.maps)
-    lr, hr = lr_set.__getitem__(0), hr_set.__getitem__(0)
-    return lr, hr
-
-def normalize_data(input_data):
-    RANGE_MIN, RANGE_MAX = input_data.min().clone().detach(), input_data.max().clone().detach()
-    transforms, inverse_transforms = get_minmax_transform(RANGE_MIN, RANGE_MAX)
-    norm_input = transforms(input_data)
-    return norm_input, transforms, inverse_transforms, RANGE_MIN, RANGE_MAX
-
-def setup_trainer(params, logger=None):
-    early_stop_callback = EarlyStopping(
-        monitor="val_loss",
-        patience=3,
-        verbose=0,
-        mode="min"
-    )
-
-    dt = datetime.datetime.now()
-    name = dt.strftime('Run_%m-%d_%H-%M')
-
-    checkpoint_callback = ModelCheckpoint(
-        filename= name + "{epoch:02d}-{val_loss:.2f}",
-        save_top_k=1,
-        monitor="val_loss",
-        save_last=False,
-        mode="min"
-    )
-
-    trainer = pl.Trainer(
-        max_epochs=params["train"]['num_epochs'],
-        callbacks=[checkpoint_callback, early_stop_callback],
-        num_sanity_val_steps=0,
-        accelerator='gpu', devices=1,
-        logger=logger
-    )
-    return trainer
-
-def initialize(config_file):
-    with open(config_file, 'r') as stream:
-        config_dict = yaml.safe_load(stream)
-
-    config_dict["train"].update({"steps_per_epoch": int(config_dict['train']['num_epochs']) * int(config_dict["data"]['n_maps']) // int(config_dict['train']['batch_size'])})
-    return config_dict
+from maploader.maploader import get_data, get_minmaxnormalized_data, get_loaders
+from utils.run_utils import initialize_config, setup_trainer
 
 class Unet_pl(pl.LightningModule):
     def __init__(self, model, params, loss_type="huber", sampler=None, conditional=False):
@@ -139,31 +86,35 @@ class Unet_pl(pl.LightningModule):
 
 if __name__ == '__main__':
     config_file = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/config/config_diffusion.yaml"
-    config_dict = initialize(config_file)
+    config_dict = initialize_config(config_file)
 
     pl.seed_everything(1234)
 
     ### get training data
-    config_dict['data']['lrmaps_dir'] = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc128/"
-    config_dict['data']['hrmaps_dir'] = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc256/"
-    config_dict['data']['nside_lr'] = 512
-    config_dict['data']['nside_hr'] = 512
-    config_dict['data']["normalize"] = False
-    config_dict['data']['order'] = 4
-    config_dict['train']['batch_size'] = 24
+    lrmaps_dir = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc128/"
+    hrmaps_dir = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc256/"
+    n_maps = len(glob(lrmaps_dir + "*.fits"))
+    nside = 512
+    order = 4
 
-    CONDITIONAL = bool(config_dict['data']['conditional'])
-    BATCH_SIZE = config_dict['train']['batch_size']
+    CONDITIONAL = True
+    BATCH_SIZE = 24
+    TRAIN_SPLIT = 0.8
 
-    lr, hr = prepare_data(config_dict['data'])
-    input_data, transforms, inverse_transforms, RANGE_MIN, RANGE_MAX = normalize_data(hr - lr)
-    condition = lr
-    combined_dataset = torch.utils.data.TensorDataset(input_data, condition)
-    len_train = int(config_dict['data']['rate_train'] * len(condition))
-    len_val = len(condition) - len_train
-    train, val = torch.utils.data.random_split(combined_dataset, [len_train, len_val])
-    loaders = {x: torch.utils.data.DataLoader(ds, batch_size=BATCH_SIZE, shuffle=x=='train', num_workers=os.cpu_count()) for x, ds in zip(('train', 'val'), (train, val))}
-    train_loader, val_loader= loaders['train'], loaders['val']
+    config_dict['train']['batch_size'] = BATCH_SIZE
+    config_dict["data"]["conditional"] = CONDITIONAL
+
+    lr = get_data(lrmaps_dir, n_maps, nside, order, issplit=True)
+    hr = get_data(hrmaps_dir, n_maps, nside, order, issplit=True)
+
+    lr, inverse_transforms_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
+    print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
+
+    hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
+    print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
+
+    data_input, data_condition = hr-lr, lr
+    train_loader, val_loader = get_loaders(data_input, data_condition, TRAIN_SPLIT, BATCH_SIZE)
 
     #get sampler type
     sampler = TimestepSampler(timesteps=int(config_dict['diffusion']['timesteps']), **config_dict['diffusion']['sampler_args'])
@@ -172,7 +123,7 @@ if __name__ == '__main__':
     model = Unet_pl(Unet, config_dict, sampler = sampler)
 
     logger = TensorBoardLogger(save_dir='/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/ckpt_logs/diffusion', name='HR_LR_normalized')
-    trainer = setup_trainer(config_dict, logger=logger)
+    trainer = setup_trainer(logger=logger, fname=None, save_top_k=1, max_epochs=config_dict['train']['num_epochs'])
     trainer.fit(model, train_loader, val_loader)
     
 
