@@ -39,9 +39,9 @@ For memory reason, we divide the data into 192 patches according to the HEALPix 
 ## 4. Results
 Our spherical super-resolution outperforms traditional methods, especially on the celestial sphere's data. 
 Key metrics include:
-[Orthogonal HEALPix Map through Diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/e7d1ce1a-e267-4459-922b-fa9396b9a27c)
+![Orthogonal HEALPix Map through Diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/e7d1ce1a-e267-4459-922b-fa9396b9a27c)
 
-[Power Spectrum thorough Diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/5f9be2e8-1e60-42ee-bef8-268b33e06431)
+![Power Spectrum thorough Diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/5f9be2e8-1e60-42ee-bef8-268b33e06431)
 
 ## 5. Future Directions and Discussion
 We aim to transition from simulations to real-world observations, particularly targeting platforms like LSST and Simon's observatory. Real-world data introduces complexities like noise and irregularities, challenging our model's robustness. As we refine our approach, we remain committed to ensuring the highest accuracy in high-resolution results.
