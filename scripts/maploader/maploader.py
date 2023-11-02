@@ -83,7 +83,7 @@ def get_minmaxnormalized_data(data_loaded):
     range_min, range_max = data_loaded.min().clone().detach(), data_loaded.max().clone().detach()
     transforms, inverse_transforms = get_minmax_transform(range_min, range_max)
     data_normalized = transforms(data_loaded)
-    return data_normalized, inverse_transforms, range_min, range_max
+    return data_normalized, transforms, inverse_transforms, range_min, range_max
 
 def get_loaders(data_input, data_condition, rate_train, batch_size):
     """

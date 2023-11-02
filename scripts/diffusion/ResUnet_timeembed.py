@@ -4,11 +4,11 @@ import pytorch_lightning as pl
 import numpy as np
 from einops import rearrange
 
-from utils.cheby_shev import SphericalChebConv
-from utils.partial_laplacians import get_partial_laplacians
-from utils.healpix_pool_unpool import Healpix
-from models.ResUnet import Block
-from utils.diffusion_utils import exists, default
+from scripts.utils.cheby_shev import SphericalChebConv
+from scripts.utils.partial_laplacians import get_partial_laplacians
+from scripts.utils.healpix_pool_unpool import Healpix
+from scripts.models.ResUnet import Block
+from scripts.utils.diffusion_utils import exists, default
 
 class ResnetBlock_t(nn.Module):
     """

@@ -5,19 +5,17 @@ https://github.com/lucidrains/denoising-diffusion-pytorch
 https://github.com/hojonathanho/diffusion
 '''
 
-import sys
 import torch
 import pickle
 from glob import glob
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
-sys.path.append('/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/scripts')
-from diffusion.diffusionclass import Diffusion
-from diffusion.schedules import TimestepSampler, linear_beta_schedule
-from diffusion.ResUnet_timeembed import Unet
-from maploader.maploader import get_data, get_minmaxnormalized_data, get_loaders
-from utils.run_utils import initialize_config, setup_trainer
+from scripts.diffusion.diffusionclass import Diffusion
+from scripts.diffusion.schedules import TimestepSampler, linear_beta_schedule
+from scripts.diffusion.ResUnet_timeembed import Unet
+from scripts.maploader.maploader import get_data, get_minmaxnormalized_data, get_loaders
+from scripts.utils.run_utils import initialize_config, setup_trainer
 
 class Unet_pl(pl.LightningModule):
     def __init__(self, model, params, loss_type="huber", sampler=None, conditional=False):
@@ -107,11 +105,14 @@ if __name__ == '__main__':
     lr = get_data(lrmaps_dir, n_maps, nside, order, issplit=True)
     hr = get_data(hrmaps_dir, n_maps, nside, order, issplit=True)
 
-    lr, inverse_transforms_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
-    print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
+    #lr, transforms_lr, nverse_transforms_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
+    #print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
 
-    hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
+    hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
     print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
+
+    lr = transforms_hr(lr)
+    print("LR data normalized by HR range. min: {}, max: {}".format(lr.min(), lr.max()))
 
     data_input, data_condition = hr-lr, lr
     train_loader, val_loader = get_loaders(data_input, data_condition, TRAIN_SPLIT, BATCH_SIZE)
@@ -122,7 +123,7 @@ if __name__ == '__main__':
     #get model
     model = Unet_pl(Unet, config_dict, sampler = sampler)
 
-    logger = TensorBoardLogger(save_dir='/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/ckpt_logs/diffusion', name='HR_LR_normalized')
+    logger = TensorBoardLogger(save_dir='/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/ckpt_logs/diffusion', name='HR_normalized')
     trainer = setup_trainer(logger=logger, fname=None, save_top_k=1, max_epochs=config_dict['train']['num_epochs'])
     trainer.fit(model, train_loader, val_loader)
     

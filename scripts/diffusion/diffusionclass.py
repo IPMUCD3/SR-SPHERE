@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 
-from utils.diffusion_utils import extract
+from scripts.utils.diffusion_utils import extract
 
 '''
 Code snippets ported from:

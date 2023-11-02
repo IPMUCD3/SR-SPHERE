@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=diffusion
 #SBATCH --account=akira.tokiwa
-#SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/%j.out  
-#SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/%j.err  
+#SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/diffmap.out  
+#SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/diffmap.err  
 #SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
@@ -18,4 +18,5 @@ export CUDA_VISIBLE_DEVICES=3 # where X is the GPU id of an available GPU
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE
-python -m run.run_diffusion
+#python -m evaluation.visualize.diffusemap
+python -m evaluation.visualize.diffusedmap2gif
