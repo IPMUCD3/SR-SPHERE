@@ -1,7 +1,7 @@
 LEGACY/
 ckpt_logs/
 log/
-results/
+results/imgs/
 scripts/__pycache__/
 scripts/diffusion/__pycache__/
 scripts/maploader/__pycache__/
