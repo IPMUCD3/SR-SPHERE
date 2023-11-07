@@ -59,11 +59,12 @@ class Unet(pl.LightningModule):
     def __init__(self, params):
         super().__init__()
 
-        self.dim = 64
-        self.dim_factor_mults = [1, 2, 4, 8]
+        self.dim_in = params["architecture"]["dim_in"]    
+        self.dim = params["architecture"]["inner_dim"]
+        self.dim_factor_mults = params["architecture"]["mults"]
         self.dim_mults = [self.dim * factor for factor in self.dim_factor_mults]
         self.kernel_size = params["architecture"]["kernel_size"]
-        self.nside = params["data"]["nside_lr"]
+        self.nside = params["data"]["nside"]
         self.order = params["data"]["order"]
         self.pooling = Healpix().pooling
         self.unpooling = Healpix().unpooling
@@ -72,7 +73,7 @@ class Unet(pl.LightningModule):
         self.laps = get_partial_laplacians(self.nside, self.depth, self.order, 'normalized')
 
         # time embeddings
-        self.time_dim = 64
+        self.time_dim = self.dim
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(self.dim),
             nn.Linear(self.dim, self.time_dim),
@@ -80,8 +81,8 @@ class Unet(pl.LightningModule):
             nn.Linear(self.time_dim, self.time_dim),
         )
 
-        self.init_conv = SphericalChebConv(1, self.dim, self.laps[-1], self.kernel_size)
-        self.init_conv_lr = SphericalChebConv(1, self.dim, self.laps[-1], self.kernel_size)
+        self.init_conv = SphericalChebConv(self.dim_in, self.dim, self.laps[-1], self.kernel_size)
+        self.init_conv_cond = SphericalChebConv(self.dim_in, self.dim, self.laps[-1], self.kernel_size)
 
         self.down_blocks = nn.ModuleList([])
         for dim_in, dim_out, lap in zip([self.dim] + self.dim_mults[:-1], self.dim_mults, reversed(self.laps)):
@@ -115,15 +116,17 @@ class Unet(pl.LightningModule):
 
         self.final_conv = nn.Sequential(
             ResnetBlock_t(self.dim, self.dim, self.laps[-1], self.kernel_size, self.time_dim), 
-            SphericalChebConv(self.dim, 1, self.laps[-1], self.kernel_size)
+            SphericalChebConv(self.dim, self.dim_in, self.laps[-1], self.kernel_size)
         )
 
-    def forward(self, x, time, x_lr, label=None):
+    def forward(self, x, time, condition=None):
         x = self.init_conv(x)
 
         t = self.time_mlp(time) if exists(self.time_mlp) else None
 
-        x = x + self.init_conv_lr(x_lr) #residual connection from low-res input
+        if exists(condition):
+            cond = self.init_conv_cond(condition)
+            x = x + cond
 
         skip_connections = []
 

@@ -42,10 +42,10 @@ if __name__ == '__main__':
 
     #get model
     model = ThreeConv(in_channels=1,
-                 inner_channels=64,
-                 nside=nside,
-                 order=order, 
-                 learning_rate=learning_rate)
+                inner_channels=64,
+                nside=nside,
+                order=order, 
+                learning_rate=learning_rate)
     logger = TensorBoardLogger(save_dir=f'{base_dir}/ckpt_logs/threeconv', name='HR_LR_normalized')
     trainer = setup_trainer(logger=logger, fname=None, save_top_k=1, max_epochs=num_epochs)
     trainer.fit(model, train_loader, val_loader)

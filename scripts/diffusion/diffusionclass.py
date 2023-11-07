@@ -36,13 +36,13 @@ class Diffusion():
         )
         return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
 
-    def p_losses(self, denoise_model, x_start, t, x_lr, noise=None, loss_type="l1", labels=None):
+    def p_losses(self, denoise_model, x_start, t, noise=None, loss_type="l1", condition=None):
         # L_CE <= L_VLB ~ Sum[eps_t - MODEL(x_t(x_0, eps_t), t) ]
         if noise is None:
             noise = torch.randn_like(x_start)
 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
-        predicted_noise = denoise_model(x_t, t, x_lr, labels)
+        predicted_noise = denoise_model(x_t, t, condition=condition)
 
         if loss_type == 'l1':
             loss = F.l1_loss(noise, predicted_noise)
@@ -55,12 +55,12 @@ class Diffusion():
         return loss
 
     @torch.no_grad()
-    def timewise_loss(self, denoise_model, x_start, t, x_lr, noise=None, loss_type="l1", labels=None):
+    def timewise_loss(self, denoise_model, x_start, t, noise=None, loss_type="l1", condition=None):
         if noise is None:
             noise = torch.randn_like(x_start)
 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
-        predicted_noise = denoise_model(x_t, t, x_lr, labels)
+        predicted_noise = denoise_model(x_t, t, condition=condition)
         if loss_type == 'l1':
             loss = F.l1_loss(noise, predicted_noise, reduction='none')
         elif loss_type == 'l2':
@@ -73,7 +73,7 @@ class Diffusion():
         return loss
 
     @torch.no_grad()
-    def p_sample(self, model, x, t, x_lr, t_index, label=None):
+    def p_sample(self, model, x, t, t_index, condition=None):
         betas_t = extract(self.betas, t, x.shape)
         sqrt_one_minus_alphas_cumprod_t = extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
@@ -82,7 +82,7 @@ class Diffusion():
 
         # Equation 11 in the paper
         # Use our model (noise predictor) to predict the mean
-        model_output = model(x, t, x_lr) if label is None else model(x, t, x_lr, label)
+        model_output = model(x, t) if condition is None else model(x, t, condition=condition)
         model_mean = sqrt_recip_alphas_t * (
                 x - betas_t * model_output / sqrt_one_minus_alphas_cumprod_t
         )
@@ -96,21 +96,21 @@ class Diffusion():
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
     @torch.no_grad()
-    def p_sample_loop(self, model, shape, labels=None):
+    def p_sample_loop(self, model, shape, condition=None):
         device = next(model.parameters()).device
         print('sample device', device)
         b = shape[0]
         # start from pure noise (for each example in the batch)
         img = torch.randn(shape, device=device)
         imgs = []
-        if labels is not None:
-            assert labels.shape[0] == shape[0]
+        if condition is not None:
+            assert condition.shape[0] == shape[0]
 
         for i in tqdm(reversed(range(0, self.timesteps)), desc='sampling loop time step', total=self.timesteps):
-            img = self.p_sample(model, img, torch.full((b,), i, device=device, dtype=torch.long), i, labels)
+            img = self.p_sample(model, img, torch.full((b,), i, device=device, dtype=torch.long), i, condition=condition)
             imgs.append(img.cpu().numpy())
         return imgs
 
     @torch.no_grad()
-    def sample(self, model, image_size, batch_size=16, channels=1, labels=None):
-        return self.p_sample_loop(model, shape=(batch_size, image_size, channels), labels=labels)
+    def sample(self, model, image_size, batch_size=16, channels=1, condition=None):
+        return self.p_sample_loop(model, shape=(batch_size, image_size, channels), condition=condition)
