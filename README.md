@@ -19,17 +19,17 @@ This method is supposed to be more efficient than directly calculate the high-re
 ## 2. Methodology
 Our approach leverages the strengths of two models:
 
-DEEPSPHERE (https://arxiv.org/abs/1810.12186): A variant of Spherical CNN renowned for its rotational equivariance and efficiency. However, it's traditionally utilized for classification tasks.
-Diffusion Model (DDPM, https://arxiv.org/abs/2006.11239): A generative model celebrated for its stability, the diversity of generation and ease of training. 
+[DEEPSPHERE](https://arxiv.org/abs/1810.12186): A variant of Spherical CNN renowned for its rotational equivariance and efficiency. However, it's traditionally utilized for classification tasks.
+Diffusion Model ([DDPM](https://arxiv.org/abs/2006.11239)): A generative model celebrated for its stability, the diversity of generation and ease of training. 
 Despite the generation time being slow, it's still faster than the simulation time of the N-body simulation.
 The integration of these models ensures accuracy, computational efficiency, and the retention of DEEPSPHERE's rotational equivariance.
 
-We utilize the structure of SR3 ( https://arxiv.org/pdf/2104.07636.pdf ) to train the model.
+We utilize the structure of [SR3](https://arxiv.org/pdf/2104.07636.pdf) to train the model.
 The planar convolutions in the denoising Unet are replaced by DEEPSPHERE.
 For other parts, we use the same structure as SR3 including skip connections and self-attention.
 
 ## 3. Data
-We use the data from the N-body simulation: FastPM (http://adsabs.harvard.edu/cgi-bin/bib_query?arXiv:1603.00476)
+We use the data from the N-body simulation: [FastPM](http://adsabs.harvard.edu/cgi-bin/bib_query?arXiv:1603.00476)
 The data is simulated in a box with the size of 384 Mpc/h.
 The particle number is 128^3 for the low-resolution data and 256^3 for the high-resolution data.
 Then we chopped out a ball with the radius of 128 Mpc/h from the center of the box and project it onto the celestial sphere in HEALPix format.
