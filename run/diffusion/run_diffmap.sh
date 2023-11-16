@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=diffusion
 #SBATCH --account=akira.tokiwa
-#SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/diffusion/diffmap.out  
-#SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/diffusion/diffmap.err  
+#SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/diffusion/diffmap_diff_linear_sigmoid.out  
+#SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/diffusion/diffmap_diff_linear_sigmoid.err  
 #SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
@@ -13,9 +13,10 @@
 source /home/akira.tokiwa/.bashrc
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=3 # where X is the GPU id of an available GPU
+export CUDA_VISIBLE_DEVICES=2 # where X is the GPU id of an available GPU
 
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE
-python -m evaluation.diffusion.diffusemap --target "HR"
+#python -m evaluation.diffusion.diffusemap_ref --target "HR" --schedule "linear" --normtype "sigmoid" --version 0 --ifref True
+python -m evaluation.diffusion.diffusemap_ref --target "difference" --schedule "linear" --normtype "sigmoid" --version 7 --ifref True

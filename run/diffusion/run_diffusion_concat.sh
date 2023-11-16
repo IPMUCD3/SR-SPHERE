@@ -18,5 +18,5 @@ export CUDA_VISIBLE_DEVICES=2 # where X is the GPU id of an available GPU
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE
-python -m run.diffusion.run_diffusion --target "difference"
-#python -m run.diffusion.run_diffusion --target "HR"
+#python -m run.diffusion.run_diffusion_concat --target "difference"
+python -m run.diffusion.run_diffusion_concat --target "HR"

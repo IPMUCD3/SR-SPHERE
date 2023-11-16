@@ -19,13 +19,27 @@ def get_minmax_transform(rangemin, rangemax):
     
     return transform, inverse_transform
 
+def get_sigmoid_transform():
+    transform = Compose([lambda t: torch.sigmoid(t)])
+    inverse_transform = Compose([lambda t: torch.logit((t))])
+    return transform, inverse_transform
+
+def get_both_transform(rangemin, rangemax):
+    # perform sigmoid and then minmax
+    transform = Compose([lambda t: torch.sigmoid(t), lambda t: (t - rangemin) / (rangemax - rangemin) * 2 - 1])
+    inverse_transform = Compose([lambda t: (t + 1) / 2 * (rangemax - rangemin) + rangemin, lambda t: torch.logit((t))])
+    return transform, inverse_transform
+
+def get_log2linear_transform():
+    transform = Compose([lambda t: 10**t - 1])
+    inverse_transform = Compose([lambda t: torch.log10(t + 1)])
+    return transform, inverse_transform
 
 def get_file_info(filename, index):
     """
     Function to get the information from the filename. seed: 1, redshift: 2
     """
     return filename.split('/')[-1].split('_')[index]
-
 
 def hp_split(img, order, nest=True):
     """
@@ -41,7 +55,6 @@ def hp_split(img, order, nest=True):
         raise NotImplementedError('Implement the change of coordinate.')
     
     return img.reshape([nsample, npix // nsample])
-
 
 class MapDataset(data.Dataset):
     """
@@ -79,9 +92,32 @@ def get_data(map_dir, n_map, nside, order=2, issplit=False):
     data_loaded = dataset.get_tensormap(data_loaded_np)
     return data_loaded
 
+def get_normalized_data(data_loaded, transform_type='minmax'):
+    if transform_type == 'minmax':
+        data_normalized, transforms, inverse_transforms, range_min, range_max = get_minmaxnormalized_data(data_loaded)
+    elif transform_type == 'sigmoid':
+        data_normalized, transforms, inverse_transforms, range_min, range_max = get_sigmoidnormalized_data(data_loaded)
+    elif transform_type == 'both':
+        data_normalized, transforms, inverse_transforms, range_min, range_max = get_bothnormalized_data(data_loaded)
+    else:
+        raise NotImplementedError()
+    return data_normalized, transforms, inverse_transforms, range_min, range_max
+
+def get_sigmoidnormalized_data(data_loaded):
+    range_min, range_max = data_loaded.min().clone().detach(), data_loaded.max().clone().detach()
+    transforms, inverse_transforms = get_sigmoid_transform()
+    data_normalized = transforms(data_loaded)
+    return data_normalized, transforms, inverse_transforms, range_min, range_max
+
 def get_minmaxnormalized_data(data_loaded):
     range_min, range_max = data_loaded.min().clone().detach(), data_loaded.max().clone().detach()
     transforms, inverse_transforms = get_minmax_transform(range_min, range_max)
+    data_normalized = transforms(data_loaded)
+    return data_normalized, transforms, inverse_transforms, range_min, range_max
+
+def get_bothnormalized_data(data_loaded):
+    range_min, range_max = torch.sigmoid(data_loaded).min().clone().detach(), torch.sigmoid(data_loaded).max().clone().detach()
+    transforms, inverse_transforms = get_both_transform(range_min, range_max)
     data_normalized = transforms(data_loaded)
     return data_normalized, transforms, inverse_transforms, range_min, range_max
 

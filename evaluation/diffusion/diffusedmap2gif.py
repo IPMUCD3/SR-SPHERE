@@ -6,8 +6,48 @@ import os
 import numpy as np
 import imageio.v2 as imageio
 import yaml
+import argparse
+import pytorch_lightning as pl
 
 from scripts.maploader.maploader import get_data, get_minmaxnormalized_data
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Run diffusion process on maps.')
+    parser.add_argument('--target', type=str, default='difference', choices=['difference', 'HR'],
+                        help='Target for the diffusion process. Can be "difference" or "HR".')
+    parser.add_argument('--schedule', type=str, default='linear', choices=['linear', 'cosine'],
+                        help='Schedule for the diffusion process. Can be "linear" or "cosine".')
+    parser.add_argument('--version', type=int, default=1, help='Version of the model to load.')
+    return parser.parse_args()
+
+
+def load_configuration(checkpoint_dir):
+    with open(f"{checkpoint_dir}/hparams.yaml", 'r') as stream:
+        return yaml.safe_load(stream)
+    
+def load_data(config_dict, issplit=True):
+    lr = get_data(config_dict['data']['LR_dir'], config_dict['data']['n_maps'], config_dict['data']['nside'], config_dict['data']['order'], issplit=issplit)
+    hr = get_data(config_dict['data']['HR_dir'], config_dict['data']['n_maps'], config_dict['data']['nside'], config_dict['data']['order'], issplit=issplit)
+    return lr, hr
+
+def preprocess_data(lr, hr, target):
+    hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
+    print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
+    print("HR data normalized. min: {}, max: {}".format(hr.min(), hr.max()))
+
+    if target == 'difference':
+        # Assuming the model expects the difference between HR and LR as input
+        lr = transforms_hr(lr)
+        print("LR data normalized by HR range. min: {}, max: {}".format(lr.min(), lr.max()))
+        data_input, data_condition = hr-lr, lr
+    elif target == 'HR':
+        # Assuming the model expects HR data as input
+        lr, transform_lr, inverse_transform_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
+        print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
+        data_input, data_condition = hr, lr
+    else:
+        raise ValueError("target must be 'difference' or 'HR'")
+    return data_input, data_condition
 
 def read_maps(map_dir, diffsteps=100, batch_size=4):
     maps = sorted(glob(map_dir + "/*.npy"), key=lambda x: (int(x.split("/")[-1].split("_")[2]), int(x.split("/")[-1].split(".")[0].split("_")[-1])))
@@ -71,14 +111,33 @@ def plot_ps_png(i, cls, ps_dir, lmax, verbose=False):
     plt.close(fig)
 
 def main():
+    args = parse_arguments()
     base_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE"
-    ckpt_dir = f"{base_dir}/ckpt_logs/diffusion/cosine_o4_b24/version_1"
-    with open(f"{ckpt_dir}/hparams.yaml", 'r') as stream:
-        config_dict = yaml.safe_load(stream)
-    map_dir = f"{base_dir}/results/imgs/diffusion/{config_dict['train']['log_name']}"
+    ckpt_dir = f"{base_dir}/ckpt_logs/diffusion/{args.target}/{args.target}_{args.schedule}_o2_b6/version_{args.version}"
 
-    BATCH_SIZE = 48#config_dict['train']['batch_size']
+    config_dict = load_configuration(ckpt_dir)
+    map_dir = f"{base_dir}/results/imgs/diffusion/{args.target}/{config_dict['train']['log_name']}"
+    pl.seed_everything(1234)
+
+    BATCH_SIZE = config_dict['train']['batch_size'] * 2
     PATCH_SIZE = 12 * (config_dict['data']['order'])**2
+
+    lr, hr = load_data(config_dict)
+    hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
+    print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
+    print("HR data normalized. min: {}, max: {}".format(hr.min(), hr.max()))
+
+    if args.target == 'difference':
+        # Assuming the model expects the difference between HR and LR as input
+        lr = transforms_hr(lr)
+        print("LR data normalized by HR range. min: {}, max: {}".format(lr.min(), lr.max()))
+    elif args.target == 'HR':
+        # Assuming the model expects HR data as input
+        lr, transform_lr, inverse_transform_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
+        print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
+    else:
+        raise ValueError("target must be 'difference' or 'HR'")
+
     NUM_BATCHES = PATCH_SIZE//BATCH_SIZE
     print(f"BATCH_SIZE: {BATCH_SIZE}, PATCH_SIZE: {PATCH_SIZE}, NUM_BATCHES: {NUM_BATCHES}")
     
@@ -86,18 +145,6 @@ def main():
     diffsteps = int(config_dict['diffusion']['timesteps'])//10
     LMAX = NSIDE*3 
     print(f"NSIDE: {NSIDE}, LMAX: {LMAX}")
-
-    lr = get_data(config_dict['data']['LR_dir'], config_dict['data']['n_maps'], config_dict['data']['nside'], config_dict['data']['order'], issplit=True)
-    hr = get_data(config_dict['data']['HR_dir'], config_dict['data']['n_maps'], config_dict['data']['nside'], config_dict['data']['order'], issplit=True)
-
-    hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
-    # range_min_hr, range_max_hr  to float]
-    range_min_hr, range_max_hr = float(range_min_hr.detach().cpu().numpy()), float(range_max_hr.detach().cpu().numpy())
-    print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
-    print("HR data normalized. min: {}, max: {}".format(hr.min(), hr.max()))
-
-    lr = transforms_hr(lr)
-    print("LR data normalized by HR range. min: {}, max: {}".format(lr.min(), lr.max()))
     
     lr_hp = np.hstack(inverse_transforms_hr(lr).detach().cpu().numpy()[:PATCH_SIZE, : , 0])
     lr_sample = np.hstack(lr.detach().cpu().numpy()[:PATCH_SIZE, : , 0])
