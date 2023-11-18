@@ -10,16 +10,15 @@ class Block(nn.Module):
     """
     Basic building block for the Unet architecture.
     """
-    def __init__(self, in_channels, out_channels, laplacian, kernel_size=8, num_groups=8):
+    def __init__(self, in_channels, out_channels, laplacian, kernel_size=8):
         super().__init__()
         self.conv = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size)
-        self.norm = nn.GroupNorm(num_groups, out_channels)
-        self.act = nn.LeakyReLU(0.1) if out_channels > 1 else nn.Identity()
+        self.norm = nn.BatchNorm1d(out_channels)
+        self.act = nn.Mish() if out_channels > 1 else nn.Identity()
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.norm(x.permute(0, 2, 1)).permute(0, 2, 1)
-        x = self.act(x)
+        x = self.act(self.norm(x.permute(0, 2, 1)).permute(0, 2, 1))
         return x
 
 
@@ -41,25 +40,19 @@ class Unet(pl.LightningModule):
     """
     Full Unet architecture composed of an encoder (downsampler), a bottleneck, and a decoder (upsampler).
     """
-    def __init__(self, 
-                 in_channels=1,
-                 inner_channels=64,
-                 mults=[1, 2, 4, 8],
-                 nside=512,
-                 order=4, 
-                 kernel_size=8,
-                 learning_rate=1e-3,
-                 gamma=0.99):
+    def __init__(self, params):
         super().__init__()
-
-        self.dim = inner_channels
-        self.dim_mults = [self.dim * factor for factor in mults]
-        self.kernel_size = kernel_size
-        self.nside = nside
-        self.order = order
+        self.save_hyperparameters(params)
+        self.dim_in = params["architecture"]["dim_in"]
+        self.dim_out = params["architecture"]["dim_out"]
+        self.dim = params["architecture"]["inner_dim"]
+        self.dim_mults = [self.dim * factor for factor in params["architecture"]["mults"]]
+        self.kernel_size = params["architecture"]["kernel_size"]
+        self.nside = params["data"]["nside"]
+        self.order = params["data"]["order"]
         self.loss_fn = nn.MSELoss()
-        self.learning_rate = learning_rate
-        self.gamma = gamma
+        self.learning_rate = params["train"]["learning_rate"]
+        self.gamma = params["train"]["gamma"]
 
         self.pooling = Healpix().pooling
         self.unpooling = Healpix().unpooling
@@ -67,7 +60,7 @@ class Unet(pl.LightningModule):
         self.depth = len(self.dim_mults)
         self.laps = get_partial_laplacians(self.nside, self.depth, self.order, 'normalized')
 
-        self.init_conv = SphericalChebConv(in_channels, self.dim, self.laps[-1], self.kernel_size)
+        self.init_conv = SphericalChebConv(self.dim_in, self.dim, self.laps[-1], self.kernel_size)
 
         self.down_blocks = nn.ModuleList([])
         for dim_in, dim_out, lap in zip([self.dim] + self.dim_mults[:-1], self.dim_mults, reversed(self.laps)):
@@ -101,7 +94,7 @@ class Unet(pl.LightningModule):
 
         self.final_conv = nn.Sequential(
             ResnetBlock(self.dim, self.dim, self.laps[-1]), 
-            SphericalChebConv(self.dim, in_channels, self.laps[-1], self.kernel_size)
+            SphericalChebConv(self.dim, self.dim_out, self.laps[-1], self.kernel_size)
         )
 
     def forward(self, x):
@@ -129,14 +122,14 @@ class Unet(pl.LightningModule):
         return self.final_conv(x)
     
     def training_step(self, batch, batch_idx):
-        x, y = batch
+        y, x = batch
         y_hat = self(x)
         loss =  self.loss_fn(y_hat, y)
         self.log('train_loss', loss, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        y, x = batch
         y_hat = self(x)
         loss =  self.loss_fn(y_hat, y)
         self.log('val_loss', loss, on_epoch=True)

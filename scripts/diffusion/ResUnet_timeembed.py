@@ -9,24 +9,6 @@ from scripts.utils.partial_laplacians import get_partial_laplacians
 from scripts.utils.healpix_pool_unpool import Healpix
 from scripts.models.ResUnet import Block
 from scripts.utils.diffusion_utils import exists, default
-from scripts.diffusion.modules_rotequ import ReLU_rotequ as rReLU
-from scripts.diffusion.modules_rotequ import BatchNorm_rotequ as rBatchNorm
-
-class rBlock(nn.Module):
-    """
-    Rotational equivariant basic building block for the Unet architecture.
-    """
-    def __init__(self, in_channels, out_channels, laplacian, kernel_size=8, num_groups=8):
-        super().__init__()
-        self.conv = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size)
-        self.norm = rBatchNorm()
-        self.act =  rReLU() if out_channels > 1 else nn.Identity()
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.act(x)
-        return x
 
 class ResnetBlock_t(nn.Module):
     """
@@ -39,10 +21,8 @@ class ResnetBlock_t(nn.Module):
             if exists(time_emb_dim)
             else None
         )
-        #self.block1 = Block(in_channels, out_channels, laplacian, kernel_size)
-        #self.block2 = Block(out_channels, out_channels, laplacian, kernel_size)
-        self.block1 = rBlock(in_channels, out_channels, laplacian, kernel_size)
-        self.block2 = rBlock(out_channels, out_channels, laplacian, kernel_size)
+        self.block1 = Block(in_channels, out_channels, laplacian, kernel_size)
+        self.block2 = Block(out_channels, out_channels, laplacian, kernel_size)
         self.res_conv = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x, time_emb=None):
@@ -59,7 +39,7 @@ class ResnetBlock_BigGAN(nn.Module):
     """
     Upsampling Residual block of BigGAN. https://arxiv.org/abs/1809.11096
     """
-    def __init__(self, in_channels, out_channels, laplacian, kernel_size, time_emb_dim, pooling, num_groups=8):
+    def __init__(self, in_channels, out_channels, laplacian, kernel_size, time_emb_dim, pooling):
         super().__init__()
         self.mlp1 = (
             nn.Sequential(nn.SiLU(), nn.Linear(time_emb_dim, in_channels))
@@ -72,9 +52,9 @@ class ResnetBlock_BigGAN(nn.Module):
             else None
         )
     
-        self.norm1 = nn.GroupNorm(num_groups, in_channels)
-        self.norm2 = nn.GroupNorm(num_groups, out_channels)
-        self.act = nn.LeakyReLU(0.2) if out_channels > 1 else nn.Identity()
+        self.norm1 = nn.BatchNorm1d(in_channels)
+        self.norm2 = nn.BatchNorm1d(out_channels)
+        self.act = nn.Mish() if out_channels > 1 else nn.Identity()
         if pooling == "pooling":
             self.pooling = Healpix().pooling
         elif pooling == "unpooling":
@@ -134,8 +114,7 @@ class Unet(pl.LightningModule):
         self.dim_in = params["architecture"]["dim_in"]    
         self.dim_out = params["architecture"]["dim_out"]
         self.dim = params["architecture"]["inner_dim"]
-        self.dim_factor_mults = params["architecture"]["mults"]
-        self.dim_mults = [self.dim * factor for factor in self.dim_factor_mults]
+        self.dim_mults = [self.dim * factor for factor in params["architecture"]["mults"]]
         self.kernel_size = params["architecture"]["kernel_size"]
         self.nside = params["data"]["nside"]
         self.order = params["data"]["order"]
@@ -223,7 +202,7 @@ class Unet(pl.LightningModule):
 
         return self.final_conv(x)
     
-class Unet_ref(pl.LightningModule):
+class Unet_bg(pl.LightningModule):
     """
     Full Unet architecture composed of an encoder (downsampler), a bottleneck, and a decoder (upsampler).
     following arxiv:2311.05217
@@ -234,8 +213,7 @@ class Unet_ref(pl.LightningModule):
         self.dim_in = params["architecture"]["dim_in"]    
         self.dim_out = params["architecture"]["dim_out"]
         self.dim = params["architecture"]["inner_dim"]
-        self.dim_factor_mults = params["architecture"]["mults"]
-        self.dim_mults = [self.dim * factor for factor in self.dim_factor_mults]
+        self.dim_mults = [self.dim * factor for factor in params["architecture"]["mults"]]
         self.kernel_size = params["architecture"]["kernel_size"]
         self.nside = params["data"]["nside"]
         self.order = params["data"]["order"]

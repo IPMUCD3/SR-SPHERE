@@ -2,7 +2,9 @@ LEGACY/
 ckpt_logs/
 log/
 results/imgs/
+paper/
 __pycache__
 *$py.class
+*$pyc
 *$pyo
 *-checkpoint.ipynb

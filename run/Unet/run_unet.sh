@@ -13,7 +13,7 @@
 source /home/akira.tokiwa/.bashrc
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=6 # where X is the GPU id of an available GPU
+export CUDA_VISIBLE_DEVICES=1 # where X is the GPU id of an available GPU
 
 conda activate pylit
 

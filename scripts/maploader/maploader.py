@@ -1,5 +1,6 @@
 import os
 from glob import glob
+from arrow import get
 import numpy as np
 import torch
 import healpy as hp
@@ -132,3 +133,40 @@ def get_loaders(data_input, data_condition, rate_train, batch_size):
     loaders = {x: data.DataLoader(ds, batch_size=batch_size, shuffle=x=='train', num_workers=os.cpu_count()) for x, ds in zip(('train', 'val'), (train, val))}
     
     return loaders['train'], loaders['val']
+
+def get_data_from_params(params):
+    lr = get_data(params["data"]["LR_dir"], params["data"]["n_maps"], params["data"]["nside"], params["data"]["order"], issplit=True)   
+    print("LR data loaded from {}.  Number of maps: {}".format(params["data"]["LR_dir"], params["data"]["n_maps"]))
+
+    hr = get_data(params["data"]["HR_dir"], params["data"]["n_maps"], params["data"]["nside"], params["data"]["order"], issplit=True)
+    print("HR data loaded from {}.  Number of maps: {}".format(params["data"]["HR_dir"], params["data"]["n_maps"]))
+
+    print("data nside: {}, divided into {} patches, each patch has {} pixels.".format(params["data"]["nside"], 12 * params["data"]["order"]**2, hp.nside2npix(params["data"]["nside"])//(12 * params["data"]["order"]**2)))
+    return lr, hr
+
+def get_normalized_from_params(lr, hr, params):
+    lr, transforms_lr, inverse_transform_lr, range_min_lr, range_max_lr = get_normalized_data(lr, transform_type=params["data"]["transform_type"])
+    print("LR data normalized to [{},{}] by {} transform.".format(lr.min(), lr.max(), params["data"]["transform_type"]))
+
+    if params["train"]['target'] == 'difference':
+        log2linear_transform, inverse_log2linear_transform = get_log2linear_transform()
+        diff = log2linear_transform(hr) - log2linear_transform(inverse_transform_lr(lr))*(params["data"]["upsample_scale"]**3)
+        print("Difference data calculated from HR - LR*upsample_scale^3. min: {}, max: {}".format(diff.min(), diff.max()))
+        diff, transforms_diff, inverse_transforms_diff, range_min_diff, range_max_diff = get_normalized_data(diff, transform_type=params["data"]["transform_type"])
+        print("Difference data normalized to [{},{}] by {} transform.".format(diff.min(), diff.max(), params["data"]["transform_type"]))
+        data_input, data_condition = diff, lr
+        return data_input, data_condition, transforms_lr, inverse_transform_lr, transforms_diff, inverse_transforms_diff, range_min_lr, range_max_lr, range_min_diff, range_max_diff
+    elif params["train"]['target'] == 'HR':
+        hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_normalized_data(hr, transform_type=params["data"]["transform_type"])
+        print("HR data normalized to [{},{}] by {} transform.".format(hr.min(), hr.max(), params["data"]["transform_type"]))
+        data_input, data_condition = hr, lr
+        return data_input, data_condition, transforms_lr, inverse_transform_lr, transforms_hr, inverse_transforms_hr, range_min_lr, range_max_lr, range_min_hr, range_max_hr
+    else:
+        raise ValueError("target must be 'difference' or 'HR'")
+
+def get_loaders_from_params(params):
+    lr, hr = get_data_from_params(params)
+    data_input, data_condition, _, _, _, _, _, _, _, _ = get_normalized_from_params(lr, hr, params)
+    train_loader, val_loader = get_loaders(data_input, data_condition, params["train"]['train_rate'], params["train"]['batch_size'])
+    print("train:validation = {}:{}, batch_size: {}".format(len(train_loader), len(val_loader), params["train"]['batch_size']))
+    return train_loader, val_loader
