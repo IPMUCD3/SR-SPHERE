@@ -153,3 +153,27 @@ class SphericalChebConv(nn.Module):
         """
         x = self.chebconv(self.laplacian, x)
         return x
+    
+class SphericalChebConv_pad(nn.Module):
+    def __init__(self, in_channels, out_channels, lap, kernel_size, pad_size, value=0):
+        super().__init__()
+        self.register_buffer("laplacian", lap)
+        self.pad_size = pad_size
+        self.paddding = nn.ConstantPad1d(padding=(0,pad_size), value=value)
+        self.chebconv = ChebConv(in_channels, out_channels, kernel_size)
+
+    def state_dict(self, *args, **kwargs):
+        state_dict = super().state_dict(*args, **kwargs)
+        del_keys = []
+        for key in state_dict:
+            if key.endswith("laplacian"):
+                del_keys.append(key)
+        for key in del_keys:
+            del state_dict[key]
+        return state_dict
+
+    def forward(self, x):
+        x = self.paddding(x)
+        x = self.chebconv(self.laplacian, x)
+        x = x[:, :-self.pad_size, :]
+        return x

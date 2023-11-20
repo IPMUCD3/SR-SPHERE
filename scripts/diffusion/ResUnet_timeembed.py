@@ -217,6 +217,7 @@ class Unet_bg(pl.LightningModule):
         self.kernel_size = params["architecture"]["kernel_size"]
         self.nside = params["data"]["nside"]
         self.order = params["data"]["order"]
+        self.skip_factor = params["architecture"]["skip_factor"]
 
         self.depth = len(self.dim_mults)
         self.laps = get_partial_laplacians(self.nside, self.depth, self.order, 'normalized')
@@ -234,34 +235,31 @@ class Unet_bg(pl.LightningModule):
         self.init_conv_cond = SphericalChebConv(self.dim_in, self.dim, self.laps[-1], self.kernel_size)
 
         self.down_blocks = nn.ModuleList([])
-        for dim_in, dim_out, lap_id, lap_down in zip([self.dim] + self.dim_mults[:-1], self.dim_mults, reversed(self.laps), reversed([self.laps[0]] + self.laps[:-1])):
-            is_last = dim_out == self.dim_mults[-1]
+        for dim_in, dim_out, lap_id, lap_down in zip(self.dim_mults[:-1], self.dim_mults[1:], reversed(self.laps[1:]), reversed(self.laps[:-1])):
             self.down_blocks.append(
                 nn.ModuleList(
                     [
                         ResnetBlock_BigGAN(dim_in, dim_out, lap_id, self.kernel_size, self.time_dim, "identity"),
-                        ResnetBlock_BigGAN(dim_out, dim_out, lap_down, self.kernel_size, self.time_dim, "pooling" if not is_last else "identity")
+                        ResnetBlock_BigGAN(dim_out, dim_out, lap_down, self.kernel_size, self.time_dim, "pooling")
                     ]
                 )
             )
 
-        self.mid_block1 = ResnetBlock_BigGAN(self.dim_mults[-1], self.dim_mults[-1], self.laps[0], self.kernel_size, self.time_dim, "identity")
-        self.mid_block2 = ResnetBlock_BigGAN(self.dim_mults[-1], self.dim_mults[-1], self.laps[0], self.kernel_size, self.time_dim, "identity")
+        self.mid_block = ResnetBlock_BigGAN(self.dim_mults[-1], self.dim_mults[-1], self.laps[0], self.kernel_size, self.time_dim, "identity")
 
         self.up_blocks = nn.ModuleList([])
-        for dim_in, dim_out, lap_id, lap_up in zip(reversed(self.dim_mults), reversed([self.dim] + self.dim_mults[:-1]), self.laps, self.laps[1:] + [self.laps[-1]]):
-            is_last = dim_in == self.dim_mults[0]
+        for dim_in, dim_out, lap in zip(reversed(self.dim_mults[1:]), reversed(self.dim_mults[:-1]), self.laps[1:]):
             self.up_blocks.append(
                 nn.ModuleList(
                     [
-                        ResnetBlock_BigGAN(dim_in*2, dim_out, lap_id, self.kernel_size, self.time_dim, "identity"),
-                        ResnetBlock_BigGAN(dim_out, dim_out, lap_up, self.kernel_size, self.time_dim, "unpooling" if not is_last else "identity")
+                        ResnetBlock_BigGAN(dim_in, dim_in, lap, self.kernel_size, self.time_dim, "unpooling"),
+                        ResnetBlock_BigGAN(2 * dim_in, dim_out, lap, self.kernel_size, self.time_dim, "identity")
                     ]
                 )
             )
 
         self.final_conv = nn.Sequential(
-            ResnetBlock_BigGAN(self.dim, self.dim, self.laps[-1], self.kernel_size, self.time_dim, "identity"), 
+            ResnetBlock_BigGAN(self.dim_mults[0], self.dim, self.laps[-1], self.kernel_size, self.time_dim, "identity"), 
             SphericalChebConv(self.dim, self.dim_out, self.laps[-1], self.kernel_size)
         )
 
@@ -278,27 +276,18 @@ class Unet_bg(pl.LightningModule):
 
         # downsample
         for block_id, block_down in self.down_blocks:
-            #print("the shape of x before downsample is ", x.shape)
             x = block_id(x, t)
-            #print("the shape of x after block_id is ", x.shape)
             skip_connections.append(x)
             x = block_down(x, t)
-            #print("the shape of x after block_down is ", x.shape)
 
         # bottleneck
-        x = self.mid_block1(x, t)
-        x = self.mid_block2(x, t)
-        #print("the shape of x after bottleneck is ", x.shape)
+        x = self.mid_block(x, t)
 
         # upsample
-        for block_id, block_up  in self.up_blocks:
-            tmp_connection = skip_connections.pop()
-            #print("the shape of skip_connection is ", tmp_connection.shape)
-            x = torch.cat([x, tmp_connection], dim=2)
-            #print("the shape of concat is ", x.shape)
-            x = block_id(x, t)
-            #print("the shape of x after block_id is ", x.shape)
+        for block_up, block_id  in self.up_blocks:
             x = block_up(x, t)
-            #print("the shape of x after block_up is ", x.shape)
+            tmp_connection = skip_connections.pop() * self.skip_factor
+            x = torch.cat([x, tmp_connection], dim=2)
+            x = block_id(x, t)
 
         return self.final_conv(x)

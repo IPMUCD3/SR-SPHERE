@@ -9,53 +9,26 @@ import yaml
 import argparse
 import pytorch_lightning as pl
 
-from scripts.maploader.maploader import get_data, get_minmaxnormalized_data
+from scripts.maploader.maploader import get_data_from_params, get_normalized_from_params, get_log2linear_transform
+from scripts.utils.run_utils import set_params
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Run diffusion process on maps.')
     parser.add_argument('--target', type=str, default='difference', choices=['difference', 'HR'],
                         help='Target for the diffusion process. Can be "difference" or "HR".')
-    parser.add_argument('--schedule', type=str, default='linear', choices=['linear', 'cosine'],
+    parser.add_argument('--scheduler', type=str, default='linear', choices=['linear', 'cosine'],
                         help='Schedule for the diffusion process. Can be "linear" or "cosine".')
+    parser.add_argument('--normtype', type=str, default='sigmoid', choices=['sigmoid', 'minmax', 'both'],
+                        help='Normalization type for the data. Can be "sigmoid" or "minmax" or "both".')
     parser.add_argument('--version', type=int, default=1, help='Version of the model to load.')
     return parser.parse_args()
 
-
-def load_configuration(checkpoint_dir):
-    with open(f"{checkpoint_dir}/hparams.yaml", 'r') as stream:
-        return yaml.safe_load(stream)
-    
-def load_data(config_dict, issplit=True):
-    lr = get_data(config_dict['data']['LR_dir'], config_dict['data']['n_maps'], config_dict['data']['nside'], config_dict['data']['order'], issplit=issplit)
-    hr = get_data(config_dict['data']['HR_dir'], config_dict['data']['n_maps'], config_dict['data']['nside'], config_dict['data']['order'], issplit=issplit)
-    return lr, hr
-
-def preprocess_data(lr, hr, target):
-    hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
-    print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
-    print("HR data normalized. min: {}, max: {}".format(hr.min(), hr.max()))
-
-    if target == 'difference':
-        # Assuming the model expects the difference between HR and LR as input
-        lr = transforms_hr(lr)
-        print("LR data normalized by HR range. min: {}, max: {}".format(lr.min(), lr.max()))
-        data_input, data_condition = hr-lr, lr
-    elif target == 'HR':
-        # Assuming the model expects HR data as input
-        lr, transform_lr, inverse_transform_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
-        print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
-        data_input, data_condition = hr, lr
-    else:
-        raise ValueError("target must be 'difference' or 'HR'")
-    return data_input, data_condition
-
 def read_maps(map_dir, diffsteps=100, batch_size=4):
-    maps = sorted(glob(map_dir + "/*.npy"), key=lambda x: (int(x.split("/")[-1].split("_")[2]), int(x.split("/")[-1].split(".")[0].split("_")[-1])))
+    maps = sorted(glob(map_dir + "/patch_*/step_*.npy"), key=lambda x: (int(x.split("/")[-2].split("_")[-1]), int(x.split("/")[-1].split(".")[0].split("_")[-1])))
     map_diffused = []
     for i in range(diffsteps):
         map_steps = []
         for j in range(batch_size):
-            #print("Current map: {}".format(maps[i*batch_size+j]))
             map_steps.append(np.load(maps[i*batch_size+j]))
         map_steps = np.array(map_steps)
         map_steps = np.hstack(map_steps)
@@ -66,10 +39,6 @@ def read_maps(map_dir, diffsteps=100, batch_size=4):
 def t2hpr(x):
     x_hp = hp.pixelfunc.reorder(x, n2r=True)
     return x_hp
-
-def inverse_transforms_hp(x, range_min, range_max):
-    x = (x + 1) / 2 * (range_max - range_min) + range_min
-    return x
 
 def plot_ps(cls, fig, ax):
     if len(cls) == 2:
@@ -113,45 +82,31 @@ def plot_ps_png(i, cls, ps_dir, lmax, verbose=False):
 def main():
     args = parse_arguments()
     base_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE"
-    ckpt_dir = f"{base_dir}/ckpt_logs/diffusion/{args.target}/{args.target}_{args.schedule}_o2_b6/version_{args.version}"
+    params = set_params(base_dir, args.target, "diffusion", args.scheduler)
 
-    config_dict = load_configuration(ckpt_dir)
-    map_dir = f"{base_dir}/results/imgs/diffusion/{args.target}/{config_dict['train']['log_name']}"
     pl.seed_everything(1234)
 
-    BATCH_SIZE = config_dict['train']['batch_size'] * 2
-    PATCH_SIZE = 12 * (config_dict['data']['order'])**2
+    lr, hr = get_data_from_params(params)
+    data_input, data_condition, transforms_lr, inverse_transforms_lr, transforms_hr, inverse_transforms_hr, range_min_lr, range_max_lr, range_min_hr, range_max_hr = get_normalized_from_params(lr, hr, params)
 
-    lr, hr = load_data(config_dict)
-    hr, transforms_hr, inverse_transforms_hr, range_min_hr, range_max_hr = get_minmaxnormalized_data(hr)
-    print("HR data loaded. min: {}, max: {}".format(range_min_hr, range_max_hr))
-    print("HR data normalized. min: {}, max: {}".format(hr.min(), hr.max()))
+    map_dir = f"{base_dir}/results/imgs/diffusion/{params['train']['log_name']}/version_{args.version}"
 
-    if args.target == 'difference':
-        # Assuming the model expects the difference between HR and LR as input
-        lr = transforms_hr(lr)
-        print("LR data normalized by HR range. min: {}, max: {}".format(lr.min(), lr.max()))
-    elif args.target == 'HR':
-        # Assuming the model expects HR data as input
-        lr, transform_lr, inverse_transform_lr, range_min_lr, range_max_lr = get_minmaxnormalized_data(lr)
-        print("LR data loaded. min: {}, max: {}".format(range_min_lr, range_max_lr))
-    else:
-        raise ValueError("target must be 'difference' or 'HR'")
+    batch_size = params['train']['batch_size']*2 if batch_size is None else batch_size
+    patch_size = 12 * (params['data']['order'])**2
+    NUM_BATCHES = int(patch_size/batch_size)
+    print(f"BATCH_SIZE: {batch_size}, NUM_BATCHES: {NUM_BATCHES}")
 
-    NUM_BATCHES = PATCH_SIZE//BATCH_SIZE
-    print(f"BATCH_SIZE: {BATCH_SIZE}, PATCH_SIZE: {PATCH_SIZE}, NUM_BATCHES: {NUM_BATCHES}")
+    diffsteps = int(params['diffusion']['timesteps'])//10
+    LMAX = int(3/2 * params['data']['nside']) 
     
-    NSIDE = config_dict['data']['nside']
-    diffsteps = int(config_dict['diffusion']['timesteps'])//10
-    LMAX = NSIDE*3 
-    print(f"NSIDE: {NSIDE}, LMAX: {LMAX}")
-    
-    lr_hp = np.hstack(inverse_transforms_hr(lr).detach().cpu().numpy()[:PATCH_SIZE, : , 0])
-    lr_sample = np.hstack(lr.detach().cpu().numpy()[:PATCH_SIZE, : , 0])
-    hr_hp = np.hstack(inverse_transforms_hr(hr).detach().cpu().numpy()[:PATCH_SIZE, : , 0])
-    
-    input_cl =hp.sphtfunc.anafast(np.exp(np.log(10)*t2hpr(lr_hp)-1), lmax=LMAX)
-    target_cl =hp.sphtfunc.anafast(np.exp(np.log(10)*t2hpr(hr_hp)-1), lmax=LMAX) * 8
+    lr_hp = np.hstack(inverse_transforms_hr(lr).detach().cpu().numpy()[:patch_size, : , 0])
+    lr_sample = np.hstack(lr.detach().cpu().numpy()[:patch_size, : , 0])
+    hr_hp = np.hstack(inverse_transforms_hr(hr).detach().cpu().numpy()[:patch_size, : , 0])
+
+    transforms_hp, inverse_transforms_hp = get_log2linear_transform()
+
+    input_cl =hp.sphtfunc.anafast(inverse_transforms_hp(t2hpr(lr_hp)), lmax=LMAX)
+    target_cl =hp.sphtfunc.anafast(inverse_transforms_hp(t2hpr(hr_hp)), lmax=LMAX) * 8
 
     map_diffused = read_maps(map_dir, diffsteps=diffsteps, batch_size=NUM_BATCHES)
     print(f"map_diffused.shape: {map_diffused.shape}")

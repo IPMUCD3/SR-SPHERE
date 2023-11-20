@@ -98,3 +98,20 @@ def get_partial_laplacians(nside, depth, order, laplacian_type):
         laps.append(prepare_laplacian(L))
     return laps[::-1]
 
+def patch_index_wneighbor(nside, order):
+    indexes = list(nside2index(nside, order))
+    neighbors = hp.pixelfunc.get_all_neighbours(nside, indexes, nest=True)
+    neighbors = np.unique(neighbors.reshape(-1))
+    nei_patch = np.setdiff1d(neighbors, indexes)
+    return nei_patch
+
+def get_partial_laplacians_pad(nside, depth, order, laplacian_type):
+    laps = []
+    for i in range(depth):
+        subdivisions = int(nside/2**i)
+        indexes = nside2index(subdivisions, order)
+        nei_patch = patch_index_wneighbor(subdivisions, order)
+        indexes = np.concatenate([indexes, nei_patch])
+        L = build_laplacian(healpix_weightmatrix(nside=subdivisions, indexes=indexes), laplacian_type)
+        laps.append(prepare_laplacian(L))
+    return laps[::-1]

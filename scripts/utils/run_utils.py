@@ -1,5 +1,6 @@
 
 from glob import glob
+import numpy as np
 import pytorch_lightning as pl
 import datetime
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -41,14 +42,14 @@ def setup_trainer(params,fname=None):
     )
     return trainer
 
-def set_train_params(params=None, target="HR", model="diffusion",  base_dir=None):
+def set_train_params(params=None, target="HR", model="diffusion", batch_size=None,  base_dir=None):
     if params is None:
         params = {}
     if "train" not in params.keys():
         params["train"] = {}
     params["train"]['target']: str = target
-    params["train"]['train_rate']: float = 0.8
-    params["train"]['batch_size']: int = 6
+    params["train"]['train_rate']: float = 0.825
+    params["train"]['batch_size']: int = 6 if batch_size is None else batch_size
     params["train"]['learning_rate'] = 10**-4
     params["train"]['n_epochs']: int = 500
     params["train"]['gamma']: float = 0.9999
@@ -56,9 +57,9 @@ def set_train_params(params=None, target="HR", model="diffusion",  base_dir=None
         base_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE"
     params["train"]['save_dir']: str = f"{base_dir}/ckpt_logs/{model}/"
     if "diffusion" in params.keys():
-        params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}_{params['diffusion']['schedule']}"
+        params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}_{params['diffusion']['schedule']}_b{params['train']['batch_size']}_o{params['data']['order']}"
     else:
-        params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}"
+        params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}_b{params['train']['batch_size']}_o{params['data']['order']}"
     params["train"]['patience']: int = 30
     params["train"]['save_top_k']: int = 1
     params["train"]['early_stop']: bool = True
@@ -69,7 +70,7 @@ def set_diffusion_params(params=None, scheduler="linear"):
         params = {}
     if "diffusion" not in params.keys():
         params["diffusion"] = {}
-    params['diffusion']['timesteps']: int = 1000
+    params['diffusion']['timesteps']: int = 2000
     params['diffusion']['loss_type']: str = "huber"
     if scheduler == "linear":
         params['diffusion']['schedule']: str = "linear"
@@ -93,31 +94,40 @@ def set_architecture_params(params=None, model="diffusion"):
     params["architecture"]["dim_out"]: int = 1
     params["architecture"]["inner_dim"]: int = 64
     if model != "threeconv":
-        params["architecture"]["mults"] = [1, 2, 4, 8]
+        params["architecture"]["mults"] = [1, 2, 4, 8, 8]
+        params["architecture"]["skip_factor"]: float = 1/np.sqrt(2)
     if model == "diffusion":
         params["architecture"]["conditional"]: bool = True
         params["architecture"]["mask"]: bool = False
     return params
 
-def set_data_params(params=None):
+def set_data_params(params=None, n_maps=None, order=2):
     if params is None:
         params = {}
     if "data" not in params.keys():
         params["data"] = {}
     params["data"]["HR_dir"]: str = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc256/"
     params["data"]["LR_dir"]: str = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc128/"
-    params["data"]["n_maps"]: int = len(glob(params["data"]["LR_dir"] + "*.fits"))
+    params["data"]["n_maps"]: int = len(glob(params["data"]["LR_dir"] + "*.fits")) if n_maps is None else n_maps
     params["data"]["nside"]: int = 512
-    params["data"]["order"]: int = 2
+    params["data"]["order"]: int = 2 if order is None else order
     params["data"]["transform_type"]: str = "both"
     params["data"]["upsample_scale"]: float = 2.0
     return params
 
-def set_params(base_dir="/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE", target="HR", model="diffusion", scheduler="linear"):
+def set_params(
+        base_dir="/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE",
+        target="HR", 
+        model="diffusion", 
+        scheduler=None,
+        order=None,
+        n_maps=None,
+        batch_size=None
+        ):
     params = {}
-    params = set_data_params(params)
+    params = set_data_params(params, n_maps=n_maps, order=order)
     params = set_architecture_params(params)
     if model == "diffusion":
-        params = set_diffusion_params(params, scheduler=scheduler)
-    params = set_train_params(params, target=target, model=model, base_dir=base_dir)
+        params = set_diffusion_params(params, scheduler=scheduler if scheduler is not None else "linear")
+    params = set_train_params(params, target=target, model=model, batch_size=batch_size, base_dir=base_dir)
     return params
