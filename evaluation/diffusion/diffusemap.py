@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from scripts.diffusion.schedules import TimestepSampler
-from scripts.diffusion.ResUnet_timeembed import Unet
+from scripts.diffusion.models.ResUnet_timeembed import Unet
 from scripts.maploader.maploader import get_data, get_minmaxnormalized_data
 from run.diffusion.run_diffusion import DDPM
 

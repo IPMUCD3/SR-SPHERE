@@ -149,9 +149,8 @@ def get_normalized_from_params(lr, hr, params):
     print("LR data normalized to [{},{}] by {} transform.".format(lr.min(), lr.max(), params["data"]["transform_type"]))
 
     if params["train"]['target'] == 'difference':
-        log2linear_transform, inverse_log2linear_transform = get_log2linear_transform()
-        diff = log2linear_transform(hr) - log2linear_transform(inverse_transform_lr(lr))*(params["data"]["upsample_scale"]**3)
-        print("Difference data calculated from HR - LR*upsample_scale^3. min: {}, max: {}".format(diff.min(), diff.max()))
+        diff = hr - inverse_transform_lr(lr)
+        print("Difference data calculated from HR - LR. min: {}, max: {}".format(diff.min(), diff.max()))
         diff, transforms_diff, inverse_transforms_diff, range_min_diff, range_max_diff = get_normalized_data(diff, transform_type=params["data"]["transform_type"])
         print("Difference data normalized to [{},{}] by {} transform.".format(diff.min(), diff.max(), params["data"]["transform_type"]))
         data_input, data_condition = diff, lr

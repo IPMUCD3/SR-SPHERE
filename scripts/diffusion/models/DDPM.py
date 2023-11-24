@@ -1,20 +1,10 @@
-'''
-Code snippets ported from:
-https://huggingface.co/blog/annotated-diffusion
-https://github.com/lucidrains/denoising-diffusion-pytorch
-https://github.com/hojonathanho/diffusion
-'''
 
-import argparse
 import torch
 import pytorch_lightning as pl
 
-from scripts.diffusion.diffusionclass import Diffusion
-from scripts.diffusion.schedules import TimestepSampler, cosine_beta_schedule, linear_beta_schedule
-from scripts.diffusion.ResUnet_timeembed import Unet_bg
-from scripts.maploader.maploader import get_loaders_from_params
-from scripts.utils.run_utils import setup_trainer, set_params
 from scripts.utils.diffusion_utils import mask_with_gaussian
+from scripts.diffusion.diffusionclass import Diffusion
+from scripts.diffusion.schedules import cosine_beta_schedule, linear_beta_schedule
 
 class DDPM(pl.LightningModule):
     def __init__(self, model, params, sampler=None):
@@ -61,37 +51,3 @@ class DDPM(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=self.gamma)
         return {"optimizer": optimizer, "lr_scheduler": scheduler} 
-
-if __name__ == '__main__':
-    args = argparse.ArgumentParser()
-    args.add_argument('--model', type=str, default='diffusion')
-    args.add_argument('--target', type=str, default='difference')
-    args.add_argument('--scheduler', type=str, default='linear')
-    args.add_argument('--order', type=int, default=4)
-    args.add_argument('--nmaps', type=int, default=100)
-    args.add_argument('--batch_size', type=int, default=6)
-    args = args.parse_args()
-    base_dir = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE"
-
-    pl.seed_everything(1234)
-    parms = set_params(base_dir=base_dir,
-        target=args.target, model=args.model, scheduler=args.scheduler,
-        order=args.order, n_maps=args.nmaps, batch_size=args.batch_size)
-    parms["train"]["save_dir"] = parms["train"]["save_dir"] + "rough/"
-
-    ### get training data
-    train_loader, val_loader = get_loaders_from_params(parms)
-
-    #get sampler type
-    sampler = TimestepSampler(
-        timesteps=int(parms['diffusion']['timesteps']), 
-        sampler_type=parms['diffusion']['sampler_type'])
-    print("sampler type: {}, timesteps: {}".format(parms['diffusion']['sampler_type'], parms['diffusion']['timesteps']))
-
-    #get model
-    model = DDPM(Unet_bg, parms, sampler = sampler)
-
-    trainer = setup_trainer(parms)
-    trainer.fit(model, train_loader, val_loader)
-    
-
