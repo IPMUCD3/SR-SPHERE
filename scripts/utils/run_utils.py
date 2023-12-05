@@ -55,14 +55,16 @@ def get_parser(): #list of args: [base_dir, n_maps, order, transform_type, model
                         help='Model to use. Can be "diffusion" or "threeconv" or "unet".')
     parser.add_argument('--conditioning', type=str, default='concat', choices=['concat', 'addconv'],
                         help='Conditioning type for the diffusion process. Can be "concat" or "addconv".')
-    parser.add_argument('--norm_type', type=str, default='batch', choices=['batch', 'group'],
+    parser.add_argument('--norm_type', type=str, default='group', choices=['batch', 'group'],
                         help='Normalization type for the model. Can be "batch" or "group".')
-    parser.add_argument('--act_type', type=str, default='mish', choices=['mish', 'silu', 'lrelu'],
+    parser.add_argument('--act_type', type=str, default='silu', choices=['mish', 'silu', 'lrelu'],
                         help='Activation type for the model. Can be "mish" or "silu" or "lrelu".')
     parser.add_argument('--block', type=str, default='biggan', choices=['biggan', 'resnet'],
                         help='Block type for the model. Can be "biggan" or "resnet".')
     parser.add_argument('--mask', type=bool, default=False,
                         help='Whether to use mask for the diffusion process.')
+    parser.add_argument('--use_attn', type=bool, default=False,
+                        help='Whether to use attention for the diffusion process.')
     parser.add_argument('--scheduler', type=str, default='linear', choices=['linear', 'cosine'],
                         help='Schedule for the diffusion process. Can be "linear" or "cosine".')
     parser.add_argument('--target', type=str, default='HR', choices=['difference', 'HR'],

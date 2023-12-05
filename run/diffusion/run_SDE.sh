@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=dscl_o4_b4_m10
+#SBATCH --job-name=SDE
 #SBATCH --account=akira.tokiwa
-#SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/testruns/dscl_o4_b4_m10.out  
-#SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/testruns/dscl_o4_b4_m10.err  
+#SBATCH --output=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/%j.out  
+#SBATCH --error=/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/log/%j.err  
 #SBATCH --time=99:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
@@ -18,4 +18,4 @@ export CUDA_VISIBLE_DEVICES=6 # where X is the GPU id of an available GPU
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE
-python -m run.diffusion.run_diffusion --model "diffusion" --target "difference" --scheduler "linear" --transform_type "sigmoid" --conditioning "concat" --order 4 --n_maps 10 --batch_size 6
+python -m run.diffusion.run_SDE --model "diffusion" --target "HR" --transform_type "sigmoid" --conditioning "concat" --order 4 --n_maps 1 --batch_size 6

@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import numpy as np
 from einops import rearrange
 
-from scripts.utils.cheby_shev import SphericalChebConv
+from scripts.layers.cheby_shev import SphericalChebConv
 from scripts.utils.partial_laplacians import get_partial_laplacians
 from scripts.utils.healpix_pool_unpool import Healpix
 from scripts.models.ResUnet import Block

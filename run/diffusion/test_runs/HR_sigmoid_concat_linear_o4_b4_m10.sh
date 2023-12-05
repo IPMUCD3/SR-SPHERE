@@ -13,9 +13,9 @@
 source /home/akira.tokiwa/.bashrc
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=1 # where X is the GPU id of an available GPU
+export CUDA_VISIBLE_DEVICES=7 # where X is the GPU id of an available GPU
 
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE
-python -m run.diffusion.run_diffusion --model "diffusion" --target "HR" --scheduler "linear" --transform_type "sigmoid" --conditioning "concat" --order 4 --n_maps 10 --batch_size 4
+python -m run.diffusion.run_diffusion --model "diffusion" --target "HR" --scheduler "linear" --transform_type "sigmoid" --conditioning "concat" --order 4 --n_maps 10 --batch_size 6

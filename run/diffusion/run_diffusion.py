@@ -7,9 +7,8 @@ https://github.com/hojonathanho/diffusion
 
 import pytorch_lightning as pl
 
-from scripts.diffusion.schedules import TimestepSampler
 from scripts.diffusion.models.Unet_base import Unet
-from scripts.diffusion.models.DDPM import DDPM
+from scripts.diffusion.DDPM import DDPM, TimestepSampler
 from scripts.maploader.maploader import get_loaders_from_params
 from scripts.utils.run_utils import setup_trainer, get_parser
 from scripts.utils.params import set_params

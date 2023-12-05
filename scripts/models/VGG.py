@@ -4,7 +4,7 @@ from torch import nn
 import pytorch_lightning as pl
 from utils.partial_laplacians import get_partial_laplacians
 from utils.healpix_pool_unpool import Healpix
-from utils.cheby_shev import SphericalChebConv
+from scripts.layers.cheby_shev import SphericalChebConv
 from models.ResUnet import Block
 
 class VGG(pl.LightningModule):

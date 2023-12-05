@@ -1,3 +1,5 @@
+
+import numpy as np
 import torch
 from inspect import isfunction
 
@@ -15,12 +17,20 @@ def extract(a, t, x_shape):
     shape = (batch_size, *((1,) * (len(x_shape) - 1)))
     return out.reshape(shape).to(t.device)
 
-def mask_with_gaussian(x, device, num_chunk=4):
-    x = torch.chunk(x, num_chunk, dim=1)
-    flags = torch.randint(2, size=(num_chunk,)).bool()
-    # make sure at least one chunk is masked
-    while flags.all():
-        flags = torch.randint(2, size=(num_chunk,)).bool()
-    x = [x[i] if flags[i] else torch.randn_like(x[i], device=device) for i in range(num_chunk)]
+def mask_with_gaussian(x, mask=None, masks=None):
+    device = x.device
+    x = torch.chunk(x, 4, dim=1)
+    if masks is None:
+        masks = [[1, 1, 1, 1], [0, 0, 1, 1], [0, 1, 0, 1], [0, 0, 0, 1]]
+    if mask is None:
+        mask = masks[np.random.randint(len(masks))]
+    x = [torch.randn_like(x[i], device=device) if mask[i] else x[i] for i in range(4)]
+    x = torch.cat(x, dim=1)
+    return x
+
+def extract_masked_region(x, mask):
+    # get the chunks where mask is 1
+    x = torch.chunk(x, 4, dim=1)
+    x = [x[i] for i in range(4) if mask[i]]
     x = torch.cat(x, dim=1)
     return x

@@ -6,7 +6,6 @@ from functools import partial
 
 from scripts.layers.timeembedding import SinusoidalPositionEmbeddings
 from scripts.layers.cheby_shev import SphericalChebConv
-from scripts.layers.attention import SelfAttention
 
 from scripts.blocks.Resnetblock import Block, ResnetBlock, ResnetBlock_BG
 from scripts.utils.partial_laplacians import get_partial_laplacians
@@ -16,7 +15,6 @@ from scripts.utils.diffusion_utils import exists
 class Unet(pl.LightningModule):
     """
     Full Unet architecture composed of an encoder (downsampler), a bottleneck, and a decoder (upsampler).
-    The architecture is inspired by the one used in the (https://arxiv.org/abs/2311.05217).
     """
     def __init__(self, params):
         super().__init__()
@@ -32,7 +30,6 @@ class Unet(pl.LightningModule):
         self.unpooling = Healpix().unpooling
         self.skip_factor = params["architecture"]["skip_factor"]
         self.conditioning = params["architecture"]["conditioning"]
-        self.use_attn = params["architecture"]["use_attn"]
 
         self.depth = len(self.dim_mults)
         self.laps = get_partial_laplacians(self.nside, self.depth, self.order, 'normalized')
@@ -61,32 +58,26 @@ class Unet(pl.LightningModule):
         for dim_in, dim_out, lap_id, lap_down in zip(self.dim_mults[:-1], self.dim_mults[1:], reversed(self.laps[1:]), reversed(self.laps[:-1])):
             self.down_blocks.append(
                 nn.ModuleList([
-                    block_id(dim_in, dim_in, lap_id),
-                    block_ud(dim_in, dim_out, lap_down, pooling = "pooling")
+                    block_id(dim_in, dim_out, lap_id),
+                    block_ud(dim_out, dim_out, lap_down, pooling = "pooling")
                     ])
                 )
         
         self.mid_block1 = block_id(self.dim_mults[-1], self.dim_mults[-1], self.laps[0])
         self.mid_block2 = block_id(self.dim_mults[-1], self.dim_mults[-1], self.laps[0])
-        if self.use_attn:
-            self.attn = SelfAttention(self.dim_mults[-1], self.laps[0], self.kernel_size, n_head=1, norm_type=params["architecture"]["norm_type"])
-
-        self.mid_block3 = block_id(self.dim_mults[-1], self.dim_mults[-1], self.laps[0])
-        self.mid_block4 = block_id(2 * self.dim_mults[-1], self.dim_mults[-1], self.laps[0])
         
         self.up_blocks = nn.ModuleList([])
-        for dim_in, dim_out, lap_id, lap_up in zip(reversed(self.dim_mults[1:]), reversed(self.dim_mults[:-1]), self.laps[:-1], self.laps[1:]):
+        for dim_in, dim_out, lap in zip(reversed(self.dim_mults[1:]), reversed(self.dim_mults[:-1]), self.laps[1:]):
             self.up_blocks.append(
                 nn.ModuleList([
-                    block_id(2*dim_in, dim_in, lap_id),
-                    block_ud(dim_in, dim_out, lap_up, pooling = "unpooling"),
-                    block_id(2*dim_out, dim_out, lap_up)
+                    block_ud(dim_in, dim_out, lap, pooling = "unpooling"),
+                    block_id(2*dim_out, dim_out, lap)
                     ])
                 )
 
         self.final_conv = nn.Sequential(
-            block_id(2 * self.dim_mults[0], self.dim, self.laps[-1]), 
-            SphericalChebConv(self.dim, self.dim_out, self.laps[-1], self.kernel_size))
+            block_id(self.dim_mults[0], self.dim, self.laps[-1]), 
+            Block(self.dim, self.dim_out, self.laps[-1], self.kernel_size))
 
     def forward(self, x, time, condition=None):
         skip_connections = []
@@ -105,29 +96,16 @@ class Unet(pl.LightningModule):
             x = block1(x, t)
             skip_connections.append(x)
             x = block2(x, t)
-            skip_connections.append(x)
 
         # bottleneck
         x = self.mid_block1(x, t)
-        skip_connections.append(x)
         x = self.mid_block2(x, t)
-        if self.use_attn:
-            x = self.attn(x)
-        x = self.mid_block3(x, t)
-        tmp_connection = skip_connections.pop() * self.skip_factor
-        x = torch.cat([x, tmp_connection], dim=2)
-        x = self.mid_block4(x, t)
 
         # upsample
-        for block1, block2, block3  in self.up_blocks:
-            tmp_connection = skip_connections.pop() * self.skip_factor
-            x = torch.cat([x, tmp_connection], dim=2)
+        for block1, block2  in self.up_blocks:
             x = block1(x, t)
-            x = block2(x, t)
             tmp_connection = skip_connections.pop() * self.skip_factor
             x = torch.cat([x, tmp_connection], dim=2)
-            x = block3(x, t)
-        
-        tmp_connection = skip_connections.pop() * self.skip_factor
-        x = torch.cat([x, tmp_connection], dim=2)
+            x = block2(x, t)
+
         return self.final_conv(x)

@@ -169,3 +169,10 @@ def get_loaders_from_params(params):
     train_loader, val_loader = get_loaders(data_input, data_condition, params["train"]['train_rate'], params["train"]['batch_size'])
     print("train:validation = {}:{}, batch_size: {}".format(len(train_loader), len(val_loader), params["train"]['batch_size']))
     return train_loader, val_loader
+
+def get_condition_from_params(params):
+    lr = get_data(params["data"]["LR_dir"], params["data"]["n_maps"], params["data"]["nside"], params["data"]["order"], issplit=True)   
+    print("LR data loaded from {}.  Number of maps: {}".format(params["data"]["LR_dir"], params["data"]["n_maps"]))
+    data_condition, transforms_lr, inverse_transform_lr, range_min_lr, range_max_lr = get_normalized_data(lr, transform_type=params["data"]["transform_type"])
+    print("LR data normalized to [{},{}] by {} transform.".format(lr.min(), lr.max(), params["data"]["transform_type"]))
+    return lr, data_condition, inverse_transform_lr

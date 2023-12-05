@@ -42,7 +42,8 @@ def set_architecture_params(params=None,
                             norm_type="batch",
                             act_type="mish",
                             block="biggan",
-                            mask=False):
+                            mask=False,
+                            use_attn=False):
     if params is None:
         params = {}
     if "architecture" not in params.keys():
@@ -56,12 +57,13 @@ def set_architecture_params(params=None,
         params["architecture"]["conditional"]: bool = True
         params["architecture"]["conditioning"]: str = conditioning 
         params["architecture"]["mask"]: bool = mask
-    params["architecture"]["kernel_size"]: int = 8 
+    params["architecture"]["kernel_size"]: int = 20 
     params["architecture"]["dim_in"]: int = 1 if params["architecture"]["conditioning"] != "concat" else 2
     params["architecture"]["dim_out"]: int = 1
     params["architecture"]["inner_dim"]: int = 64
     params["architecture"]["norm_type"]: str = norm_type
     params["architecture"]["act_type"]: str = act_type
+    params["architecture"]["use_attn"]: bool = use_attn
     return params
 
 def set_train_params(params=None, base_dir=None, target="HR", batch_size=4):
@@ -82,8 +84,8 @@ def set_train_params(params=None, base_dir=None, target="HR", batch_size=4):
     else:
         params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}_{params['architecture']['conditioning']}_b{params['train']['batch_size']}_o{params['data']['order']}"
     params["train"]['patience']: int = 30
-    params["train"]['save_top_k']: int = 1
-    params["train"]['early_stop']: bool = True
+    params["train"]['save_top_k']: int = 3
+    params["train"]['early_stop']: bool = False
     return params
 
 def set_params(
@@ -93,10 +95,11 @@ def set_params(
         transform_type="sigmoid",
         model="diffusion",
         conditioning="concat",
-        norm_type="batch",
-        act_type="mish",
+        norm_type="group",
+        act_type="silu",
         block="biggan",
         mask=False,
+        use_attn=False,
         scheduler="linear",
         target="HR", 
         batch_size=4
@@ -104,7 +107,7 @@ def set_params(
     params = {}
     params = set_data_params(params, n_maps=n_maps, order=order, transform_type=transform_type)
     params = set_architecture_params(params, model=model, conditioning=conditioning, 
-                                    norm_type=norm_type, act_type=act_type, block=block, mask=mask)
+                                    norm_type=norm_type, act_type=act_type, block=block, mask=mask, use_attn=use_attn)
     if model == "diffusion":
         params = set_diffusion_params(params, scheduler=scheduler)
     params = set_train_params(params, base_dir=base_dir, target=target, batch_size=batch_size)
