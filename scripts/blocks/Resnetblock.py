@@ -1,3 +1,4 @@
+#Description: This file contains the implementation of the ResnetBlock class, which is used to define the ResNet architecture.
 from torch import nn
 from scripts.layers.cheby_shev import SphericalChebConv
 from scripts.layers.normalization import Norms
@@ -15,7 +16,7 @@ The implementation is designed to be modular, allowing easy integration into lar
 
 class Block(nn.Module):
     def __init__(self, in_channels, out_channels, 
-                laplacian, kernel_size=8, 
+                laplacian, kernel_size=20, 
                 norm_type="group", act_type="silu"):
         super().__init__()
         self.conv = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size)
@@ -24,7 +25,7 @@ class Block(nn.Module):
 
     def forward(self, x):
         return self.conv(self.act(self.norm(x)))
-        
+
 class ResnetBlock_BG(nn.Module):
     """
     Up/Downsampling Residual block of BigGAN. https://arxiv.org/abs/1809.11096
@@ -34,8 +35,8 @@ class ResnetBlock_BG(nn.Module):
                 norm_type="group", act_type="silu"):
         super().__init__()
         if exists(time_emb_dim):
-            self.mlp1 = TimeEmbed(time_emb_dim, in_channels)
-            self.mlp2 = TimeEmbed(time_emb_dim, out_channels)
+            self.mlp1 = TimeEmbed(time_emb_dim, in_channels * 2)
+            self.mlp2 = TimeEmbed(time_emb_dim, out_channels * 2)
 
         self.norm1 = Norms(in_channels, norm_type)
         self.norm2 = Norms(out_channels, norm_type)
@@ -51,7 +52,8 @@ class ResnetBlock_BG(nn.Module):
             self.pooling = nn.Identity()
         else:
             raise ValueError("must be pooling, unpooling or identity")
-        self.conv_res = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size) if in_channels != out_channels else nn.Identity()
+        #self.conv_res = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size) if in_channels != out_channels else nn.Identity()
+        self.conv_res = nn.Linear(in_channels, out_channels)
         self.conv1 = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size)
         self.conv2 = SphericalChebConv(out_channels, out_channels, laplacian, kernel_size)
 
@@ -60,7 +62,9 @@ class ResnetBlock_BG(nn.Module):
         res = self.conv_res(self.pooling(x))
 
         if exists(time_emb):
-            h = self.mlp1(time_emb) + h
+            t_e = self.mlp1(time_emb)
+            scale, shift = t_e.chunk(2, dim = 2)
+            h = h * (scale + 1) + shift
 
         h = self.norm1(h)
         h = self.act1(h)
@@ -68,7 +72,9 @@ class ResnetBlock_BG(nn.Module):
         h = self.conv1(h)
 
         if exists(time_emb):
-            h = self.mlp2(time_emb) + h
+            t_e = self.mlp2(time_emb)
+            scale, shift = t_e.chunk(2, dim = 2)
+            h = h * (scale + 1) + shift
 
         h = self.norm2(h)
         h = self.act2(h)
@@ -81,34 +87,61 @@ class ResnetBlock(nn.Module):
     Up/Downsampling Residual block implemented from https://arxiv.org/abs/2311.05217.
     Originally https://arxiv.org/abs/1512.03385.
     """
-    def __init__(self, in_channels, out_channels, 
-                laplacian, pooling="identity", kernel_size=8, time_emb_dim=None, 
-                norm_type="group", act_type="silu"):
+    def __init__(self, in_channels, out_channels, laplacian, 
+                time_emb_dim, kernel_size=20, dropout=0.0, 
+                norm_type="group", act_type="silu", 
+                use_scale_shift_norm=False, use_conv=False, up=False, down=False):
         super().__init__()
-        if exists(time_emb_dim):
-            self.mlp = TimeEmbed(time_emb_dim, out_channels)
+        
+        self.use_scale_shift_norm = use_scale_shift_norm
+        self.emb = TimeEmbed(time_emb_dim, out_channels * 2 if use_scale_shift_norm else out_channels)
 
-        if pooling == "pooling":
-            self.pooling = Healpix().pooling
-        elif pooling == "unpooling":
+        self.in_layers = nn.Sequential(
+            Norms(in_channels, norm_type),
+            Acts(act_type),
+            SphericalChebConv(in_channels, out_channels, laplacian, kernel_size),
+        )
+
+        self.updown = up or down
+        if up:
             self.pooling = Healpix().unpooling
-        elif pooling == "identity":
-            self.pooling = nn.Identity()
+        elif down:
+            self.pooling = Healpix().pooling
         else:
-            raise ValueError("must be pooling, unpooling or identity")
-        self.conv_res = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size) if in_channels != out_channels else nn.Identity()
-        self.block1 = Block(in_channels, out_channels, laplacian, kernel_size, norm_type, act_type)
-        self.block2 = Block(out_channels, out_channels, laplacian, kernel_size, norm_type, act_type)
+            self.pooling = nn.Identity()
 
-    def forward(self, x, time_emb=None):
-        h = x
-        res = self.conv_res(self.pooling(x))
+        self.out_layers = nn.Sequential(
+            Norms(out_channels, norm_type),
+            Acts(act_type),
+            nn.Dropout(p=dropout),
+            SphericalChebConv(out_channels, out_channels, laplacian, kernel_size),
+        )
 
-        h = self.block1(h)
-        h = self.pooling(h)
+        if out_channels == in_channels:
+            self.skip_connection = nn.Identity()
+        elif use_conv:
+            self.skip_connection = SphericalChebConv(in_channels, out_channels, laplacian, kernel_size)
+        else:
+            self.skip_connection = nn.Linear(in_channels, out_channels)
 
-        if exists(time_emb):
-            h = self.mlp(time_emb) + h
+    def forward(self, x, time_emb):
+        if self.updown:
+            in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
+            h = in_rest(x)
+            h = self.pooling(h)
+            h = in_conv(h)
+            x = self.pooling(x)
+        else:
+            h = self.in_layers(x)
+            
+        emb_out = self.emb(time_emb)
+        if self.use_scale_shift_norm:
+            out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
+            scale, shift = emb_out.chunk(2, dim=2)
+            h = out_norm(h) * (1 + scale) + shift
+            h = out_rest(h)
+        else:
+            h = h + emb_out
+            h = self.out_layers(h)
 
-        h = self.block2(h)
-        return h + res
+        return self.skip_connection(x) + h

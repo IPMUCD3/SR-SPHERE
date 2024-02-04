@@ -28,6 +28,13 @@ def mask_with_gaussian(x, mask=None, masks=None):
     x = torch.cat(x, dim=1)
     return x
 
+def hr_or_sample(x, x_t, mask):
+    x = torch.chunk(x, 4, dim=1)
+    x_t = torch.chunk(x_t, 4, dim=1)
+    x = [x_t[i] if mask[i] else x[i] for i in range(4)]
+    x = torch.cat(x, dim=1)
+    return x
+
 def extract_masked_region(x, mask):
     # get the chunks where mask is 1
     x = torch.chunk(x, 4, dim=1)

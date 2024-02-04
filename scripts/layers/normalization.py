@@ -16,11 +16,11 @@ class Norms(nn.Module):
         if norm_type == "batch":
             self.norm = nn.BatchNorm1d(dim)  # Batch normalization
         elif norm_type == "group":
-            self.norm = nn.GroupNorm(num_groups, dim)  # Group normalization
+            self.norm = nn.GroupNorm(num_groups, dim, eps=1e-6, affine=True)  # Group normalization
         else:
             self.norm = nn.Identity()  # Identity (no normalization)
 
-    def forward(self, x):
+    def forward(self, x, time_emb=None):
         # Apply the chosen normalization
         # Permute the dimensions of x for compatibility with nn.BatchNorm1d and nn.GroupNorm
         return self.norm(x.permute(0, 2, 1)).permute(0, 2, 1)

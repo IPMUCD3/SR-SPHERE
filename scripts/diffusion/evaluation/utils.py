@@ -1,5 +1,6 @@
 
 import os
+from pyrsistent import b
 import torch
 import healpy as hp
 import numpy as np
@@ -7,11 +8,12 @@ from glob import glob
 from tqdm import tqdm
 from scripts.diffusion.DDPM import DDPM, TimestepSampler
 
-def initialize_model(denoising_model, ckpt_path, params, device):
+def initialize_model(denoising_model, params):
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     timesteps = int(params['diffusion']['timesteps'])
     sampler = TimestepSampler(timesteps=timesteps, sampler_type=params['diffusion']['sampler_type'])
     model = DDPM(denoising_model, params, sampler=sampler).to(device)
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(params["valid"]["ckpt_path"])
     model.load_state_dict(ckpt["state_dict"], strict=False)
     model.eval()
     return model
@@ -32,15 +34,22 @@ def run_diffusion_oneloop(model,
                 np.save(f"{save_dir}/step_{str(j).zfill(3)}.npy", diffmap)
                 print(f"Saved step {j} to {save_dir}/step_{str(j).zfill(3)}.npy") if verbose else None
 
-def run_diffusion(model, cond, map_dir, batch_size, num_patches, timesteps,savestep=10, verbose=True):
+def run_diffusion(model, cond, params, verbose=True):
     device = model.device
+    map_dir = params["valid"]["map_dir"]
+    batch_size = params["valid"]["batch_size"]
+    num_samples = params["valid"]["num_samples"]
+    num_patches = params["valid"]["num_patches"]
+    timesteps = int(params["diffusion"]["timesteps"])
+    savestep = params["valid"]["savestep"]
+
     for i in range(num_patches):
         print(f"Running diffusion on patch {i+1}/{int(num_patches)}") if verbose else None
         tmp_cond = cond[batch_size*i:batch_size*(i+1)].to(device)
         tmp_save_dir = f"{map_dir}/patch_{i+1}"
         os.makedirs(tmp_save_dir, exist_ok=True)
         y = torch.randn(tmp_cond.shape, device=device)
-        run_diffusion_oneloop(model, y, tmp_cond, tmp_save_dir, timesteps, savestep=savestep)
+        run_diffusion_oneloop(model, y, tmp_cond, tmp_save_dir, num_samples, savestep=savestep)
 
 def read_maps(map_dir, diffsteps=100, batch_size=4):
     maps = sorted(glob(map_dir + "/patch_*/step_*.npy"), key=lambda x: (int(x.split("/")[-2].split("_")[-1]), int(x.split("/")[-1].split(".")[0].split("_")[-1])))

@@ -4,7 +4,8 @@ from torch import optim
 import torch
 import pytorch_lightning as pl
 
-from scripts.utils import SphericalChebConv, get_partial_laplacians, Healpix
+from scripts.layers.cheby_shev import SphericalChebConv
+from scripts.utils import get_partial_laplacians, Healpix
 
 class Block(nn.Module):
     """

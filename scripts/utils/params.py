@@ -1,114 +1,112 @@
 
-import os
 import numpy as np
-from glob import glob
 
-def set_data_params(params=None, 
-                    n_maps=None, 
-                    order=2, 
-                    transform_type="sigmoid"):
+def set_data_params(params:dict=None, 
+                    n_maps:int=None,
+                    nside:int=512,
+                    order:int=None,
+                    batch_size:int=32,
+                    difference:bool=True):
     if params is None:
         params = {}
     if "data" not in params.keys():
         params["data"] = {}
-    params["data"]["HR_dir"]: str = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc256/"
-    params["data"]["LR_dir"]: str = "/gpfs02/work/akira.tokiwa/gpgpu/FastPM/healpix/nc128/"
-    params["data"]["n_maps"]: int = n_maps if n_maps is not None else len(glob(params["data"]["LR_dir"] + "*.fits"))
-    params["data"]["nside"]: int = 512
-    params["data"]["order"]: int = order
-    params["data"]["transform_type"]: str = transform_type
-    params["data"]["upsample_scale"]: float = 2.0
+    params["data"]["HR_dir"]: str = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/data/nc256"
+    params["data"]["LR_dir"]: str = "/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/data/nc128"
+    params["data"]["n_maps"]: int = n_maps
+    params["data"]["nside"]: int = nside
+    params["data"]["order"] = order
+    params["data"]["batch_size"]: int = batch_size
+    params["data"]["rate_split"]: list = [0.8, 0.1, 0.1]
+    params["data"]["norm"]: bool = True
+    params["data"]["difference"]: bool = difference
     return params
 
-def set_diffusion_params(params=None, scheduler="linear"):
+def set_diffusion_params(params=None, 
+                        mask=False,
+                        timesteps=2000,
+                        scheduler="linear", 
+                        loss_type="huber"):
     if params is None:
         params = {}
     if "diffusion" not in params.keys():
         params["diffusion"] = {}
-    params['diffusion']['timesteps']: int = 2000
-    params['diffusion']['loss_type']: str = "huber"
+    params['diffusion']['sampler_type']: str = "uniform"
+
+    params["diffusion"]['learning_rate'] = 10**-4
+    params["diffusion"]['gamma'] = 0.9999
+    params["diffusion"]['mask'] = mask
+
+    params['diffusion']['timesteps']: int = timesteps
     params['diffusion']['schedule']: str = scheduler
     if params['diffusion']['schedule'] == "linear":
         params['diffusion']['linear_beta_start']: float = 10**(-6)
         params['diffusion']['linear_beta_end']: float = 10**(-2)
     elif params['diffusion']['schedule'] == "cosine":
         params['diffusion']['cosine_beta_s']: float = 0.015
-    params['diffusion']['sampler_type']: str = "uniform"
+    params['diffusion']['loss_type']: str = loss_type
     return params
 
 def set_architecture_params(params=None, 
-                            model="diffusion", 
                             conditioning="concat",
+                            use_attn=False,
                             norm_type="batch",
-                            act_type="mish",
-                            block="biggan",
-                            mask=False,
-                            use_attn=False):
+                            act_type="silu",
+                            use_conv=False,
+                            use_scale_shift_norm=True,
+                            num_resblocks=[2, 2, 2, 2]):
     if params is None:
         params = {}
     if "architecture" not in params.keys():
         params["architecture"] = {}
-    params["architecture"]["model"]: str = model
-    if params["architecture"]["model"] != "threeconv":
-        params["architecture"]["mults"] = [1, 2, 4, 4]
-        params["architecture"]["block"]: str = block
-        params["architecture"]["skip_factor"]: float = 1/np.sqrt(2)
-    if params["architecture"]["model"] == "diffusion":
-        params["architecture"]["conditional"]: bool = True
-        params["architecture"]["conditioning"]: str = conditioning 
-        params["architecture"]["mask"]: bool = mask
-    params["architecture"]["kernel_size"]: int = 20 
-    params["architecture"]["dim_in"]: int = 1 if params["architecture"]["conditioning"] != "concat" else 2
+    params["architecture"]["conditioning"]: str = conditioning 
+    params["architecture"]["dim_in"]: int = 2 if params["architecture"]["conditioning"] == "concat" else 1
     params["architecture"]["dim_out"]: int = 1
     params["architecture"]["inner_dim"]: int = 64
+    params["architecture"]["mults"] = [1, 2, 4, 8]
+    params["architecture"]["num_resblocks"]: list = num_resblocks
+    params["architecture"]["skip_factor"]: float = 1/np.sqrt(2)
+    params["architecture"]["use_attn"]: bool = use_attn
+    if params["architecture"]["use_attn"]:
+        params["architecture"]["attn_type"]: str = "self"
     params["architecture"]["norm_type"]: str = norm_type
     params["architecture"]["act_type"]: str = act_type
-    params["architecture"]["use_attn"]: bool = use_attn
+    params["architecture"]["use_conv"]: bool = use_conv
+    params["architecture"]["use_scale_shift_norm"]: bool = use_scale_shift_norm
+    params["architecture"]["kernel_size"]: int = 20 
     return params
 
-def set_train_params(params=None, base_dir=None, target="HR", batch_size=4):
+def set_train_params(params=None, save_dir="/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE/ckpt_logs", log_name="test"):
     if params is None:
         params = {}
     if "train" not in params.keys():
         params["train"] = {}
-    params["train"]['target']: str = target
-    params["train"]['train_rate']: float = 0.825
-    params["train"]['batch_size']: int = batch_size
-    params["train"]['learning_rate'] = 10**-4
-    params["train"]['n_epochs']: int = 1000
-    params["train"]['gamma']: float = 0.9999
-    params["train"]['save_dir']: str = f"{base_dir}/ckpt_logs/{params['architecture']['model']}/"
-    os.makedirs(params["train"]['save_dir'], exist_ok=True)
-    if "diffusion" in params.keys():
-        params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}_{params['diffusion']['schedule']}_{params['architecture']['conditioning']}_b{params['train']['batch_size']}_o{params['data']['order']}"
-    else:
-        params["train"]['log_name']: str = f"{params['train']['target']}_{params['data']['transform_type']}_{params['architecture']['conditioning']}_b{params['train']['batch_size']}_o{params['data']['order']}"
-    params["train"]['patience']: int = 30
+    params["train"]['save_dir']: str = save_dir
+    params["train"]['log_name']: str = log_name
+    params["train"]['n_epochs']: int = 100
+    params["train"]['patience']: int = 10
     params["train"]['save_top_k']: int = 3
-    params["train"]['early_stop']: bool = False
+    params["train"]['early_stop']: bool = True
     return params
 
 def set_params(
-        base_dir="/gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE",
         n_maps=None,
+        nside=512,
         order=2,
-        transform_type="sigmoid",
-        model="diffusion",
+        batch_size=4,
+        difference=True,
         conditioning="concat",
-        norm_type="group",
+        norm_type="batch",
         act_type="silu",
-        block="biggan",
-        mask=False,
         use_attn=False,
+        mask=False,
         scheduler="linear",
-        target="HR", 
-        batch_size=4
+        timesteps=2000,
+        log_name="test",
         ):
     params = {}
-    params = set_data_params(params, n_maps=n_maps, order=order, transform_type=transform_type)
-    params = set_architecture_params(params, model=model, conditioning=conditioning, 
-                                    norm_type=norm_type, act_type=act_type, block=block, mask=mask, use_attn=use_attn)
-    if model == "diffusion":
-        params = set_diffusion_params(params, scheduler=scheduler)
-    params = set_train_params(params, base_dir=base_dir, target=target, batch_size=batch_size)
+    params = set_data_params(params, n_maps=n_maps, nside=nside, order=order, batch_size=batch_size, difference=difference)
+    params = set_architecture_params(params, conditioning=conditioning, norm_type=norm_type, act_type=act_type, use_attn=use_attn)
+    params = set_diffusion_params(params, mask=mask, scheduler=scheduler, timesteps=timesteps)
+    params = set_train_params(params, log_name=log_name)
     return params

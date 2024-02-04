@@ -1,3 +1,6 @@
+"""Partial Laplacians for the HEALPix graph.
+copied from deepsphere
+"""
 from scipy import sparse
 from scipy.sparse import coo_matrix
 import healpy as hp

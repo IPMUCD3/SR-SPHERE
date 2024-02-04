@@ -1,3 +1,4 @@
+from tkinter import SE
 import torch
 import torch.nn as nn
 import math
@@ -13,6 +14,18 @@ It employs spherical Chebyshev convolution for query, key, value transformations
 techniques for stabilizing the learning process. The self-attention mechanism is designed to process
 graph-structured data, making it suitable for applications like HEALPix map.
 '''
+
+class Attentions(nn.Module):
+    def __init__(self, dim, laplacian, attn_type):
+        super().__init__()
+
+        if attn_type == "self":
+            self.attn = SelfAttention(dim, laplacian)
+        else:
+            self.attn = nn.Identity()  # Identity 
+
+    def forward(self, x):
+        return self.attn(x)
 
 class SelfAttention(nn.Module):
     def __init__(self, in_channel, laplacian, kernel_size, n_head=1, norm_type="group"):
@@ -76,3 +89,46 @@ class QKVAttention(nn.Module):
         weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = torch.einsum("bts,bsc->btc", weight, value.reshape(batch * self.n_head, -1, ch))
         return a.reshape(batch, length, -1)
+
+class PatchEmbed(nn.Module):
+    def __init__(
+            self,
+            in_chans,
+            img_size=224,
+            patch_size=4,
+            embed_dim=96,
+            patch_norm=False,
+            ):
+        super().__init__()
+        img_size = to_2tuple(img_size)
+        patch_size = to_2tuple(patch_size)
+        patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.patches_resolution = patches_resolution
+        self.num_patches = patches_resolution[0] * patches_resolution[1]
+        self.embed_dim = embed_dim
+
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        if patch_norm:
+            self.norm = normalization(embed_dim)
+        else:
+            self.norm = nn.Identity()
+
+    def forward(self, x):
+        """
+        Args:
+            x: B x Healpix Patch x C 
+        output: B x embed_dim x Ph x Pw, Ph = H // patch_size
+
+        """
+        x = self.proj(x)  # B x embed_dim x Ph x Pw
+        x = self.norm(x)
+        return x
+
+    def flops(self):
+        flops = 0
+        H, W = self.img_size
+        if self.norm is not None:
+            flops += H * W * self.embed_dim
+        return flops

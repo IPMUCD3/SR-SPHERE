@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 
 from scripts.diffusion.models.Unet_base import Unet
 from scripts.diffusion.DDPM import DDPM, TimestepSampler
-from scripts.maploader.maploader import get_loaders_from_params
+from scripts.maploader.datamodules import DataModule
 from scripts.utils.run_utils import setup_trainer, get_parser
 from scripts.utils.params import set_params
 
@@ -18,19 +18,20 @@ if __name__ == '__main__':
     args = args.parse_args()
 
     pl.seed_everything(1234)
-    parms = set_params(**vars(args))
+    params = set_params(**vars(args))
 
     ### get training data
-    train_loader, val_loader = get_loaders_from_params(parms)
+    dm = DataModule(**params['data'])
+    dm.setup()
+    train_loader = dm.train_dataloader()
+    val_loader = dm.val_dataloader()
 
     #get sampler type
-    sampler = TimestepSampler(
-        timesteps=int(parms['diffusion']['timesteps']), 
-        sampler_type=parms['diffusion']['sampler_type'])
-    print("sampler type: {}, timesteps: {}".format(parms['diffusion']['sampler_type'], parms['diffusion']['timesteps']))
+    sampler = TimestepSampler(timesteps=params['diffusion']['timesteps'])
 
     #get model
-    model = DDPM(Unet, parms, sampler = sampler)
+    unet = Unet(params['data']["nside"], params['data']["order"], **params['architecture'])
+    model = DDPM(unet, sampler, **params['diffusion'])
 
-    trainer = setup_trainer(parms)
+    trainer = setup_trainer(**params['train'])
     trainer.fit(model, train_loader, val_loader)

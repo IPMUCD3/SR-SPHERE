@@ -15,6 +15,7 @@ See: https://healpix.jpl.nasa.gov/
 :math:`N_{pixels} = 12 * N_{sides}^2`
 Nsides is the number of divisions from the baseline of 12 equal sized pixels
 
+Copied from deepsphere
 """
 import torch.nn as nn
 import torch.nn.functional as F

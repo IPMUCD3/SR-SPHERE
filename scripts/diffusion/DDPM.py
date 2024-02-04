@@ -1,12 +1,12 @@
 
-from pyparsing import alphas
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import numpy as np
+import random
 from tqdm.auto import tqdm
 
-from scripts.utils.diffusion_utils import mask_with_gaussian, extract_masked_region
+from scripts.utils.diffusion_utils import extract_masked_region, hr_or_sample
 from scripts.utils.diffusion_utils import extract
 
 '''
@@ -43,26 +43,24 @@ def cosine_beta_schedule(timesteps, s=0.015):
 
 #based off https://github.com/openai/improved-diffusion/blob/783b6740edb79fdb7d063250db2c51cc9545dcd1/improved_diffusion/resample.py
 class TimestepSampler():
-    def __init__(self, sampler_type='uniform', timesteps=None, device='cuda'):
+    def __init__(self, timesteps, sampler_type="uniform"):
         self.timesteps = timesteps
-        self.device=device
+        self.sampler_type = sampler_type
+        print("sampler type: {}, timesteps: {}".format(self.sampler_type, self.timesteps))
 
     def get_timesteps(self, batch_size, iteration):
-        return torch.randint(0, self.timesteps, (batch_size,), device=self.device).long()
+        return torch.randint(0, self.timesteps, (batch_size,), device='cuda').long()
 
 class Diffusion():
-    # implement arxiv:2104.07636
-    def __init__(self, alphas):
-        self.alphas = alphas
-        self.one_minus_alphas = 1. - alphas
-        self.gammas = torch.cumprod(self.alphas, axis=0)
-        self.sqrt_gammas = torch.sqrt(self.gammas)
-        self.sqrt_one_minus_gammas = torch.sqrt(1. - self.gammas)
-        self.gammas_prev = F.pad(self.gammas[:-1], (1, 0), value=1.0)
-        self.posterior_variance = self.one_minus_alphas * (1. - self.gammas_prev) / (1. - self.gammas)
+    def __init__(self, **args):
+        self.timesteps = args['timesteps']
+        if args['schedule'] == "cosine":
+            betas = cosine_beta_schedule(timesteps=self.timesteps, s=args['cosine_beta_s'])
+            print("The schedule is cosine with s = {}".format(args['cosine_beta_s']))
+        elif args['schedule'] == "linear":
+            betas = linear_beta_schedule(timesteps=self.timesteps, beta_start=args['linear_beta_start'], beta_end=args['linear_beta_end'])
+            print("The schedule is linear with beta_start = {}, beta_end = {}".format(args['linear_beta_start'], args['linear_beta_end']))
 
-class Diffusion():
-    def __init__(self, betas):
         self.betas = betas
         self.alphas = 1. - betas
         self.alphas_cumprod = torch.cumprod(self.alphas, axis=0)  # alpha_bar
@@ -75,7 +73,16 @@ class Diffusion():
         self.posterior_variance = self.betas
         # y_t-1 = sqrt_recip_alphas * (y_t - betas_t * MODEL(x_t, t) / sqrt_one_minus_alphas_cumprod_t)
         #         + sqrt_one_minus_alphas_cumprod_t * eps_t
-        self.timesteps = len(self.betas)
+
+        self.loss_type = args["loss_type"]
+        if self.loss_type == 'l1':
+            self.loss_fn = F.l1_loss
+        elif self.loss_type == 'l2':
+            self.loss_fn = F.mse_loss
+        elif self.loss_type == "huber":
+            self.loss_fn = F.smooth_l1_loss
+        else:
+            raise NotImplementedError()
 
     # forward diffusion (using the nice property)
     def q_sample(self, x_start, t, noise=None):
@@ -88,40 +95,25 @@ class Diffusion():
         )
         return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
 
-    def p_losses(self, denoise_model, x_start, t, noise=None, loss_type="l1", condition=None):
+    def p_losses(self, denoise_model, x_start, t, noise=None, condition=None):
         # L_CE <= L_VLB ~ Sum[eps_t - MODEL(x_t(x_0, eps_t), t) ]
         if noise is None:
             noise = torch.randn_like(x_start)
 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
         predicted_noise = denoise_model(x_t, t, condition=condition)
-
-        if loss_type == 'l1':
-            loss = F.l1_loss(noise, predicted_noise)
-        elif loss_type == 'l2':
-            loss = F.mse_loss(noise, predicted_noise)
-        elif loss_type == "huber":
-            loss = F.smooth_l1_loss(noise, predicted_noise)
-        else:
-            raise NotImplementedError()
+        loss = self.loss_fn(noise, predicted_noise)
         return loss
 
     @torch.no_grad()
-    def timewise_loss(self, denoise_model, x_start, t, noise=None, loss_type="l1", condition=None):
+    def timewise_loss(self, denoise_model, x_start, t, noise=None, condition=None):
         if noise is None:
             noise = torch.randn_like(x_start)
 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
         predicted_noise = denoise_model(x_t, t, condition=condition)
-        if loss_type == 'l1':
-            loss = F.l1_loss(noise, predicted_noise, reduction='none')
-        elif loss_type == 'l2':
-            loss = F.mse_loss(noise, predicted_noise, reduction='none')
-        elif loss_type == "huber":
-            loss = F.smooth_l1_loss(noise, predicted_noise, reduction='none')
-        else:
-            raise NotImplementedError()
-        loss = torch.mean(loss, dim=[-3, -2, -1]) #mean over all spatial dims
+        loss = self.loss_fn(noise, predicted_noise)
+        loss = torch.mean(loss, dim=[-2, -1]) #mean over all spatial dims
         return loss
 
     @torch.no_grad()
@@ -168,59 +160,55 @@ class Diffusion():
         return self.p_sample_loop(model, shape=(batch_size, image_size, channels), condition=condition)
     
 class DDPM(pl.LightningModule):
-    def __init__(self, model, params, sampler=None):
+    def __init__(self, model, sampler, **args):
         super().__init__()
-        self.save_hyperparameters(params)
-        self.model = model(params)
-        self.batch_size = params["train"]['batch_size']
-        self.learning_rate = params["train"]['learning_rate']
-        self.gamma = params["train"]['gamma']
+        self.learning_rate = args['learning_rate']
+        self.gamma = args['gamma']
         print("We are using Adam with lr = {}, gamma = {}".format(self.learning_rate, self.gamma))
-        self.ifmask = params["architecture"]["mask"]
-
-        timesteps = int(params['diffusion']['timesteps'])
-        if params['diffusion']['schedule'] == "cosine":
-            betas = cosine_beta_schedule(timesteps=timesteps, s=params['diffusion']['cosine_beta_s'])
-            print("The schedule is cosine with s = {}".format(params['diffusion']['cosine_beta_s']))
-        elif params['diffusion']['schedule'] == "linear":
-            betas = linear_beta_schedule(timesteps=timesteps, beta_start=params['diffusion']['linear_beta_start'], beta_end=params['diffusion']['linear_beta_end'])
-            print("The schedule is linear with beta_start = {}, beta_end = {}".format(params['diffusion']['linear_beta_start'], params['diffusion']['linear_beta_end']))
-        self.diffusion = Diffusion(betas)
-        self.loss_type = params['diffusion']['loss_type']
-
-        self.sampler = sampler
-
+        
+        self.ifmask = args["mask"]
         if self.ifmask:
             self.masks = [[1, 1, 1, 1], [0, 0, 1, 1], [0, 1, 0, 1], [0, 0, 0, 1]]
             print("We are using mask with gaussian noise")
 
+        self.save_hyperparameters(ignore=['model'])
+        self.diffusion = Diffusion(**args)
+        self.model = model
+        self.sampler = sampler
+
     def training_step(self, batch, batch_idx):
-        x, cond = batch
+        cond, x = batch
         t = self.sampler.get_timesteps(x.shape[0], self.current_epoch)
         if self.ifmask:
-            mask = self.masks[np.random.randint(len(self.masks))]
-            x = mask_with_gaussian(x, mask=mask)
+            mask = [random.choice(self.masks) for _ in range(x.shape[0])]
             noise = torch.randn_like(x)
             x_t = self.diffusion.q_sample(x_start=x, t=t, noise=noise)
-            predicted_noise = self.model(x_t, t, condition=cond)
-            loss = F.smooth_l1_loss(extract_masked_region(noise, mask), extract_masked_region(predicted_noise, mask))
+            x_masked = torch.cat([hr_or_sample(x[i:i+1, :, :], x_t[i:i+1, :, :], mask[i]) for i in range(x.shape[0])], dim=0)
+            predicted_noise = self.model(x_masked, t, condition=cond)
+
+            corr_noise = torch.cat([extract_masked_region(noise[i:i+1, :, :], mask[i]) for i in range(x.shape[0])], dim=1)
+            corr_pred = torch.cat([extract_masked_region(predicted_noise[i:i+1, :, :], mask[i]) for i in range(x.shape[0])], dim=1)
+            loss = self.diffusion.loss_fn(corr_noise, corr_pred)
         else:
-            loss = self.diffusion.p_losses(self.model, x, t, condition=cond, loss_type=self.loss_type)
+            loss = self.diffusion.p_losses(self.model, x, t, condition=cond)
         self.log('train_loss', loss)
         return loss
     
     def validation_step(self, batch, batch_idx):
-        x, cond = batch
+        cond, x = batch
         t = self.sampler.get_timesteps(x.shape[0], self.current_epoch)
         if self.ifmask:
-            mask = self.masks[np.random.randint(len(self.masks))]
-            x = mask_with_gaussian(x, mask=mask)
+            mask = [random.choice(self.masks) for _ in range(x.shape[0])]
             noise = torch.randn_like(x)
             x_t = self.diffusion.q_sample(x_start=x, t=t, noise=noise)
-            predicted_noise = self.model(x_t, t, condition=cond)
-            loss = F.smooth_l1_loss(extract_masked_region(noise, mask), extract_masked_region(predicted_noise, mask))
+            x_masked = torch.cat([hr_or_sample(x[i:i+1, :, :], x_t[i:i+1, :, :], mask[i]) for i in range(x.shape[0])], dim=0)
+            predicted_noise = self.model(x_masked, t, condition=cond)
+
+            corr_noise = torch.cat([extract_masked_region(noise[i:i+1, :, :], mask[i]) for i in range(x.shape[0])], dim=1)
+            corr_pred = torch.cat([extract_masked_region(predicted_noise[i:i+1, :, :], mask[i]) for i in range(x.shape[0])], dim=1)
+            loss = self.diffusion.loss_fn(corr_noise, corr_pred)
         else:
-            loss = self.diffusion.p_losses(self.model, x, t, condition=cond, loss_type=self.loss_type)
+            loss = self.diffusion.p_losses(self.model, x, t, condition=cond)
         self.log('val_loss', loss)
         return loss
 
