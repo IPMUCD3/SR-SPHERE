@@ -24,25 +24,24 @@ Diffusion Model ([DDPM](https://arxiv.org/abs/2006.11239)): A generative model c
 Despite the generation time being slow, it's still faster than the simulation time of the N-body simulation.
 The integration of these models ensures accuracy, computational efficiency, and the retention of DEEPSPHERE's rotational equivariance.
 
-We utilize the structure of [SR3](https://arxiv.org/pdf/2104.07636.pdf) to train the model.
+We utilize the similar structure as [SR3](https://arxiv.org/pdf/2104.07636.pdf) to train the model.
 The planar convolutions in the denoising Unet are replaced by DEEPSPHERE.
-For other parts, we use the same structure as SR3 including skip connections and self-attention.
+For other parts, we use the same structure as SR3 including skip connections but without self-attention.
 
 ## 3. Data
 We use the data from the N-body simulation: [FastPM](http://adsabs.harvard.edu/cgi-bin/bib_query?arXiv:1603.00476)
 The data is simulated in a box with the size of 384 Mpc/h.
 The particle number is 128^3 for the low-resolution data and 256^3 for the high-resolution data.
-Then we chopped out a ball with the radius of 128 Mpc/h from the center of the box and project it onto the celestial sphere in HEALPix format.
+Then we chopped out a ball with the radius of half boxsize from the center of the box and project it onto the celestial sphere in HEALPix format.
 The resolution of the data are both Nside=512.
-For memory reason, we divide the data into 192 patches according to the HEALPix pixelization.
+For memory reason, we divide the data into 768 patches (each patch has 4096 pixels) according to the HEALPix pixelization.
 
 ## 4. Results
 Our spherical super-resolution outperforms traditional methods, especially on the celestial sphere's data. 
 Key metrics include:
-![Orthogonal HEALPix Map through Diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/e7d1ce1a-e267-4459-922b-fa9396b9a27c)
+![diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/7d0174fa-a35c-43ca-8e9a-09f50518eea4)
 
-
-![Power Spectrum thorough Diffusion](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/d7da3e2e-24a3-49f8-9873-db7486c060a6)
+![diffusion_ps](https://github.com/IPMUCD3/SR-SPHERE/assets/26876924/7b1859a8-0069-463d-a04c-0b3369a4a9b5)
 
 ## 5. Future Directions and Discussion
 We aim to transition from simulations to real-world observations, particularly targeting platforms like LSST and Simon's observatory. Real-world data introduces complexities like noise and irregularities, challenging our model's robustness. As we refine our approach, we remain committed to ensuring the highest accuracy in high-resolution results.

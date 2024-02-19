@@ -7,7 +7,7 @@ from functools import partial
 from srsphere.models.modules.timeembedding import SinusoidalPositionEmbeddings
 from srsphere.models.modules.normalization import Norms
 from srsphere.models.modules.activation import Acts
-#from srsphere.models.modules.attention import Attentions
+from srsphere.models.modules.attention import SelfAttention
 from srsphere.models.modules.Resnetblock import ResnetBlock
 
 from deepsphere.cheby_shev import SphericalChebConv
@@ -71,22 +71,22 @@ class Unet(pl.LightningModule):
             tmp = nn.ModuleList([])
             for jj in range(num_resblock):
                 tmp.append(block_partial(dim_in, dim_in, lap_id))
-                #if (jj == 0)&(self.use_attn):
-                    #tmp.append(Attentions(self.attn_type, dim_in, lap_id))
+            if (jj == 0)&(self.use_attn):
+                tmp.append(SelfAttention(dim_in, lap_id, self.kernel_size, n_head=1))
             tmp.append(block_partial(dim_in, dim_out, lap_down, down = True))
             self.down_blocks.append(tmp)
 
         self.mid_block1 = block_partial(self.dim_mults[-1], self.dim_mults[-1], self.laps[0])
-        #if self.use_attn:
-        #    self.mid_attn = Attentions(self.attn_type, self.dim_mults[-1], self.laps[0])
+        if self.use_attn:
+            self.mid_attn = SelfAttention(self.dim_mults[-1], self.laps[0], self.kernel_size, n_head=1)
         self.mid_block2 = block_partial(self.dim_mults[-1], self.dim_mults[-1], self.laps[0])
 
         self.up_blocks = nn.ModuleList([])
         for dim_in, dim_out, lap_id, lap_up, num_resblock in zip(reversed(self.dim_mults[1:]), reversed(self.dim_mults[:-1]), self.laps[:-1], self.laps[1:], self.num_resblocks):
             tmp = nn.ModuleList([])
             tmp.append(block_partial(2*dim_in, dim_in, lap_id))
-            #if self.use_attn:
-            #    tmp.append(Attentions(self.attn_type, dim_in, lap_id, self.kernel_size, n_head=1, norm_type=self.norm_type))
+            if self.use_attn:
+                tmp.append(SelfAttention(dim_in, lap_id, self.kernel_size, n_head=1))
             tmp.append(block_partial(dim_in, dim_out, lap_up, up = True))
             self.up_blocks.append(tmp)
 
@@ -115,8 +115,8 @@ class Unet(pl.LightningModule):
 
         # bottleneck
         x = self.mid_block1(x, t)
-        #if self.use_attn:
-        #    x = self.mid_attn(x)
+        if self.use_attn:
+            x = self.mid_attn(x)
         x = self.mid_block2(x, t)
 
         # upsample
