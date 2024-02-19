@@ -161,7 +161,8 @@ cython_debug/
 
 log/
 ckpt_logs/
-LEGACY/
 data/
 results/
 paper/
+scripts/
+tests/
