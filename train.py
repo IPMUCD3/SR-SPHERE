@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import logging
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -13,8 +14,8 @@ from srsphere.params import set_params
 
 def setup_trainer(**args):
     logger = TensorBoardLogger(save_dir=args['save_dir'], name=args['log_name'])
-    print("data saved in {}".format(args['save_dir']))
-    print("data name: {}".format(args['log_name']))
+    logging.info("data saved in {}".format(args['save_dir']))
+    logging.info("data name: {}".format(args['log_name']))
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
@@ -38,7 +39,7 @@ def setup_trainer(**args):
         max_epochs=args['n_epochs'],
         callbacks=[checkpoint_callback, early_stop_callback] if args['early_stop'] else [checkpoint_callback],
         num_sanity_val_steps=0,
-        accelerator='gpu', devices=1,
+        accelerator="gpu", devices=1,
         logger=logger
     )
     return trainer
@@ -74,6 +75,7 @@ def get_parser():
     return parser
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', filename='./log/train.log')
     args = get_parser()
     args = args.parse_args()
 

@@ -1,4 +1,5 @@
 
+import logging
 import torch
 import pytorch_lightning as pl
 import random
@@ -11,13 +12,12 @@ class DDPM(pl.LightningModule):
         super().__init__()
         self.learning_rate = args['learning_rate']
         self.gamma = args['gamma']
-        #print("We are using Adam with lr = {}, gamma = {}".format(self.learning_rate, self.gamma))
+        logging.info("We are using Adam with lr = {}, gamma = {}".format(self.learning_rate, self.gamma))
         
         self.ifmask = args["mask"]
         if self.ifmask:
             self.masks = [[1, 1, 1, 1], [0, 0, 1, 1], [0, 1, 0, 1], [0, 0, 0, 1]]
 
-        #self.save_hyperparameters()
         self.diffusion = Diffusion(**args)
         self.model = model
         self.sampler = sampler

@@ -1,4 +1,5 @@
 
+import logging
 import torch
 import numpy as np
 
@@ -34,7 +35,7 @@ class TimestepSampler():
     def __init__(self, timesteps, sampler_type="uniform"):
         self.timesteps = timesteps
         self.sampler_type = sampler_type
-        print("sampler type: {}, timesteps: {}".format(self.sampler_type, self.timesteps))
+        logging.info("sampler type: {}, timesteps: {}".format(self.sampler_type, self.timesteps))
 
     def get_timesteps(self, batch_size, iteration):
         return torch.randint(0, self.timesteps, (batch_size,), device='cuda').long()

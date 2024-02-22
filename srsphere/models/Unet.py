@@ -20,6 +20,7 @@ class Unet(pl.LightningModule):
     """
     def __init__(self, nside, order, **args):
         super().__init__()
+        self.save_hyperparameters(args)
 
         # params for basic architecture
         self.dim_in = args["dim_in"]    

@@ -1,4 +1,5 @@
 
+import logging
 import os
 import torch.utils.data as data
 import pytorch_lightning as pl
@@ -30,14 +31,13 @@ class DataModule(pl.LightningDataModule):
         self.norm = args['norm']
         self.difference = args['difference']
         self.upsample_scale = args['upsample_scale']
-        self.save_hyperparameters()
 
     def setup(self, stage=None):
         self.dataset = MapDataset(self.lr_dir, self.hr_dir, n_maps=self.n_maps, norm=self.norm, order=self.order, difference=self.difference, upsample_scale=self.upsample_scale**3)
         self.len_train = int(self.rate_split[0] * self.dataset.__len__())
         self.len_val =  int(self.rate_split[1] * self.dataset.__len__())
         self.len_test = len(self.dataset) - self.len_train - self.len_val
-        print("train:validation:test = {}:{}:{}, batch_size: {}".format(self.len_train, self.len_val, self.len_test, self.batch_size))
+        logging.info("train:validation:test = {}:{}:{}, batch_size: {}".format(self.len_train, self.len_val, self.len_test, self.batch_size))
         self.train_dataset, self.val_dataset, self.test_dataset = data.random_split(self.dataset, [self.len_train, self.len_val, self.len_test])
 
     def train_dataloader(self):

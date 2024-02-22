@@ -79,10 +79,10 @@ class NestGridShift:
         patch_order = [0, 1, 2, 3]
         if count1 % 2 == 1:
             # reorder to [2, 3, 0, 1]
-            patch_order = [patch_order[2], patch_order[3], patch_order[0], patch_order[1]]
-        if count2 % 2 == 1:
-            # reorder to [0, 1, 2, 3]
             patch_order = [patch_order[1], patch_order[0], patch_order[3], patch_order[2]]
+        if count2 % 2 == 1:
+            # reorder to [1, 0, 3, 2]
+            patch_order = [patch_order[2], patch_order[3], patch_order[0], patch_order[1]]
         return np.array(patch_order).astype(int)
     
     def _prepare_shift_matrix(self):

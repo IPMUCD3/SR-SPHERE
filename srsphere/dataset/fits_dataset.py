@@ -1,4 +1,5 @@
 
+import logging
 import torch
 import numpy as np
 import healpy as hp
@@ -57,12 +58,12 @@ class MapDataset(data.Dataset):
     """
     def __init__(self, lrdir, hrdir, n_maps=None, norm=True, order=None, difference=True, upsample_scale=2**3, verbose=True):
         if n_maps is None:
-            print("n_maps is not specified, loading all maps in the directory.") if verbose else None
+            logging.info("n_maps is not specified, loading all maps in the directory.") if verbose else None
             self.lrmap_path = sorted(glob(f'{lrdir}/*.fits'))
             self.hrmap_path = sorted(glob(f'{hrdir}/*.fits'))
             self.n_maps = np.min([len(self.lrmap_path), len(self.hrmap_path)])
         else:
-            print(f"loading {n_maps} maps in the directory.") if verbose else None
+            logging.info(f"loading {n_maps} maps in the directory.") if verbose else None
             self.n_maps = n_maps
             self.lrmap_path = sorted(glob(f'{lrdir}/*.fits'))[:self.n_maps]
             self.hrmap_path = sorted(glob(f'{hrdir}/*.fits'))[:self.n_maps]
@@ -85,9 +86,9 @@ class MapDataset(data.Dataset):
             self.diffmaps = [normalize_diff(denormalize(self.lrmaps[i]), denormalize(self.hrmaps[i])) for i in range(len(self.lrmaps))]
 
         if verbose:
-            print("LR data loaded from {}.  Number of maps: {}".format(lrdir, self.n_maps))
-            print("HR data loaded from {}.  Number of maps: {}".format(hrdir, self.n_maps))
-            print("data divided into {} patches.".format(self.n_patches)) if order is not None else None
+            logging.info(f"LR data loaded from {lrdir}.  Number of maps: {self.n_maps}")
+            logging.info(f"HR data loaded from {hrdir}.  Number of maps: {self.n_maps}")
+            logging.info(f"data divided into {self.n_patches} patches.") if order is not None else None
 
     def __len__(self):
         return len(self.lrmaps)

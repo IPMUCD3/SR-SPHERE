@@ -13,9 +13,9 @@
 source /home/akira.tokiwa/.bashrc
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=5 # where X is the GPU id of an available GPU
+export CUDA_VISIBLE_DEVICES=1 # where X is the GPU id of an available GPU
 
 conda activate pylit
 
 cd /gpfs02/work/akira.tokiwa/gpgpu/Github/SR-SPHERE
-python -m train --n_maps 100 --nside 512 --order 8 --batch_size 32 --difference True --conditioning concat --norm_type batch --act_type silu --use_attn False --mask True --scheduler cosine --timesteps 2000 --log_name n100_s512_o8_b32_dTrue_concat_batch_silu_aFalse_mTrue_cosine_t2000
+srun python3 -m train --n_maps 100 --nside 512 --order 8 --batch_size 32 --difference True --conditioning concat --norm_type batch --act_type silu --use_attn False --mask True --scheduler cosine --timesteps 2000 --log_name n100_s512_o8_b32_dTrue_concat_batch_silu_aFalse_mTrue_cosine_t2000

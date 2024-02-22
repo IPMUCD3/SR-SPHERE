@@ -1,4 +1,5 @@
 
+from calendar import c
 import numpy as np
 import healpy as hp
 import torch
@@ -39,12 +40,12 @@ class GenerationStrategy:
 
     def _extract_mask(self, count1: int, count2: int) -> list:
         """Extracts the generation mask for adjacent superpixels."""
-        return [
+        return np.array([
             self.gen_flag[count1, count2],
             self.gen_flag[count1 + 1, count2],
             self.gen_flag[count1, count2 + 1],
             self.gen_flag[count1 + 1, count2 + 1]
-        ]
+        ])[self.grid._calculate_patch_order(count1, count2)]
 
     def _fill_gen_flag(self, count1: int, count2: int) -> None:
         """Updates the generation flags for the current and adjacent superpixels."""

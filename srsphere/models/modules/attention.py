@@ -22,7 +22,7 @@ class SelfAttention(nn.Module):
         self.qkv =  SphericalChebConv(in_channel, in_channel * 3, laplacian, kernel_size)
         self.out = SphericalChebConv(in_channel, in_channel, laplacian, kernel_size)
 
-    def forward(self, input):
+    def forward(self, input, time=None):
         batch, length, channel = input.shape
         n_head = self.n_head
         head_dim = channel // n_head
